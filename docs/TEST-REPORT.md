@@ -1,4 +1,6 @@
-# Test report — 2026-09-09
+# Initial test report — 2026-09-09
+
+**Historical record:** the current deployment and live-account results are documented in [REMOTE-VERIFICATION.md](REMOTE-VERIFICATION.md). The initial deployment/API limitations below describe the earlier packaging stage and are superseded where the new report provides direct evidence.
 
 ## Result
 

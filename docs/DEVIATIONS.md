@@ -67,3 +67,24 @@ A claim/redeem does not add a second payout. The formula, five-decimal fee round
 - [API changelog](https://docs.polymarket.com/changelog/predictions)
 
 The source snapshot and complete unified diff accompany this document so every code change is reviewable.
+
+## Windows deployment update — 9 September 2026
+
+This addendum records changes after Windows commit `7a992ec`; earlier D01–D15 and limitations still apply.
+
+| Change | Motivation and effect |
+|---|---|
+| BTC 5m / BTC 15m selector in the existing switch row | Requested by the user. Keeps the original primary controls, chart, cards, typography and colors. Each report contains only the selected BTC interval; grouping, closing time, countdown, live fills, demo, labels, and CSV use 300 or 900 seconds consistently. |
+| Strict BTC market slugs | Stops 15m, other assets, or contradictory market/event identifiers entering a 5m report. The old title/sub-string fallback could accept wrong intervals. |
+| New report on interval switch | Automatically reloads the same wallet, clears previous data and rebates, and invalidates obsolete requests. A delayed 5m response cannot overwrite 15m results. Selected interval is remembered; `?timeframe=15m` is supported. |
+| Metadata-aware cash validation | Activity may report fee-inclusive USDC. Validation occurs after the market fee schedule arrives, accepts bare notional or the side-correct fee adjustment, and avoids permanently rejecting valid historical fees based on today's fallback rate. Gross notional stays shares × price; fees are deducted once. |
+| Explicit conflicting resolution evidence | A second source cannot silently rescue contradictory winners or final prices. Affected rounds are excluded and explained instead of entering the equity curve. |
+| Null rebate response | The live endpoint returned HTTP 200 with JSON null. It now reports that no records were returned and no amount is confirmed, rather than a generic error or a fabricated zero. |
+| Bounded 12-second market metadata reuse | Simultaneous identical market requests share one upstream call. Public market definitions are reused for at most 12 seconds, bounded to 128 entries / 4 MiB. Wallet history, positions, profiles and rebates are never cached. Newly published metadata can consequently appear up to 12 seconds later. |
+| Static asset revalidation | Cloudflare's asset header changes from `no-store` to `no-cache`, allowing ETag revalidation without serving an unchecked old release. This reduces repeat transfer sizes when the browser has an unchanged asset. API responses remain no-store. |
+| Missing cash evidence | Null or absent USDC values remain absent rather than becoming a false zero and excluding otherwise valid fills. Explicit zero remains genuine data subject to validation. |
+| Rebate button after loading | Diagnostics refresh after loading finishes, so a report loaded with auto-refresh off immediately enables the rebate lookup. |
+| Verified input wallet before proxy substitution | The live tmsd-test lookup proposed an empty proxy although the entered wallet had recent trades. When profile and input differ, one matching TRADE record now preserves the entered wallet; an empty input still resolves normally to its profile proxy. A failed probe retains the input and visibly marks mapping as unverified. This prevents false empty reports and adds no request when the profile address already matches. |
+| Expanded regression coverage | Tests cover both intervals, obsolete responses, historical fee evidence, contradictory settlement sources, null rebates and gateway request sharing. These do not alter the product layout. |
+
+The existing diagnostics panel shows modeled fees already included in net P&L, gross P&L, drawdown, profit factor, role counts, coverage, observed wallet-wide rebate payouts, and separate daily maker accruals for visible markets. Daily accruals and payouts are not added together or to the settlement curve. Rewards, deposits, withdrawals, transfers and open-position marks are not reconstructed; the curve remains settled trading P&L from zero rather than wallet equity or return on capital.

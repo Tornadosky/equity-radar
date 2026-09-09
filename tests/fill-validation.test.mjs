@@ -43,7 +43,13 @@ test('notional stays size x price so the modeled fee is not counted twice', () =
 test('a genuinely inconsistent notional is still rejected', () => {
   const a = loadRadar();
   const record = a.normalizeTradeRecord(asFill({size: 10, price: 0.5, usdcSize: 9}, 0));
-  assert.equal(record._invalid, 'Inconsistent fill notional');
+  assert.equal(record._invalid, ''); // Cash evidence is checked after the market schedule loads.
+  a.state.historySinceSec=1788937200;
+  record.slug=record.eventSlug='btc-updown-5m-1788937200';
+  const market={resolved:true,outcomes:['Up','Down'],outcomePrices:[1,0],feeSchedule:{rate:.07,exponent:1,takerOnly:true}};
+  const row=a.enrichGroups(a.buildGroups([record],1788937200),[],[],new Map([[record.conditionId,market]]))[0];
+  assert.equal(row.excluded,true);
+  assert.ok(row.qualityIssues.includes('Inconsistent fill notional'));
 });
 
 test('btc-updown-15m does not enter a 5m report', () => {

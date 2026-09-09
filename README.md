@@ -47,9 +47,10 @@ Dockerfile is provided; an actual Docker build was not run in this environment.
 
 ## Use the report
 
-- **Start date:** entered in your browser’s local time; fetches start at the containing five-minute boundary.
+- **BTC markets:** choose 5m (default) or 15m. Switching reloads the same wallet into a separate interval-specific report, including chart, live fills, countdown and CSV.
+- **Start date:** entered in your browser’s local time; fetches start at the containing selected market boundary (five or fifteen minutes).
 - **Visible period / Resolved only / Bought both:** filter markets, totals, chart and market CSV together. Sorting changes table order. Live fills remain the wallet’s separate latest-fill view.
-- **Equity curve:** cumulative settled BTC 5m trade P&L from $0. It is not wallet balance, capital return or open-position equity.
+- **Equity curve:** cumulative settled trade P&L from $0 for the selected BTC 5m or 15m markets. It is not wallet balance, capital return or open-position equity.
 - **Excluded from equity:** inspect Details for malformed data, missing inventory, lifecycle events or incomplete history. Raw fills remain visible.
 - **Recheck P&L:** compares model results with public API P&L per expected outcome token.
 - **Trader diagnostics:** drawdown, profit factor, gross P&L, estimated fees, maker/taker/unknown counts and coverage.
@@ -72,6 +73,6 @@ For an entirely synthetic end-to-end session:
 node tests/fixture-server.mjs
 ```
 
-Open `http://localhost:3000` and load **0x1111111111111111111111111111111111111111** with the default 24-hour start. The fixture is rebased to the current date. Expected: 8 rounds, 13 fills, 5 included settled rounds, 2 excluded rounds, **+$61.49075** underlying settled P&L, **$1.75** recorded wallet-wide rebate payments, and **$1.25** separately reported daily maker accrual. One additional market is unresolved. Do not use this synthetic server for live accounts.
+Open `http://localhost:3000`, choose **5m**, and load **0x1111111111111111111111111111111111111111** with the default 24-hour start. The fixture is rebased to the current date. Expected: 8 rounds, 13 fills, 5 included settled rounds, 2 excluded rounds, **+$61.49075** underlying settled P&L, **$1.75** recorded wallet-wide rebate payments, and **$1.25** separately reported daily maker accrual. One additional market is unresolved. Do not use this synthetic server for live accounts.
 
-`docs/TEST-REPORT.md` distinguishes completed checks from external limitations. Live account validation was blocked by HTTP 403 from this environment. Public API results, historical fee applicability and real wallet-provider prompts require verification from your deployment environment.
+`docs/REMOTE-VERIFICATION.md` records the current Windows and deployed-site checks, including real 5m/15m reports. `docs/TEST-REPORT.md` preserves the initial fixture and design audit. Public inputs and modeled fees are not transaction-receipt proof. A real wallet extension connection and browser-to-disk CSV download remain unverified in the available browser environment.
