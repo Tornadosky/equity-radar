@@ -1,0 +1,252 @@
+{
+  "rounds": [
+    {
+      "id": "R1",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "winner": "Up",
+      "buyNotional": 40.0,
+      "sellNotional": 0.0,
+      "fee": 1.68,
+      "tradeNetShares": {
+        "Up": 100.0,
+        "Down": 0.0
+      },
+      "legacyTradeOnlyPayout": 100.0,
+      "legacyTradeOnlyPnl": 58.32,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 100.0,
+        "Down": 0.0
+      },
+      "correctLifecyclePayout": 100.0,
+      "correctPnl": 58.32,
+      "eligibleWhenLifecycleUnsupported": true,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": null
+    },
+    {
+      "id": "R2",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "winner": "Down",
+      "buyNotional": 48.0,
+      "sellNotional": 0.0,
+      "fee": 0.0,
+      "tradeNetShares": {
+        "Up": 80.0,
+        "Down": 0.0
+      },
+      "legacyTradeOnlyPayout": 0.0,
+      "legacyTradeOnlyPnl": -48.0,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 80.0,
+        "Down": 0.0
+      },
+      "correctLifecyclePayout": 0.0,
+      "correctPnl": -48.0,
+      "eligibleWhenLifecycleUnsupported": true,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": null
+    },
+    {
+      "id": "R3",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "winner": "Up",
+      "buyNotional": 39.0,
+      "sellNotional": 0.0,
+      "fee": 0.672,
+      "tradeNetShares": {
+        "Up": 50.0,
+        "Down": 40.0
+      },
+      "legacyTradeOnlyPayout": 50.0,
+      "legacyTradeOnlyPnl": 10.328,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 50.0,
+        "Down": 40.0
+      },
+      "correctLifecyclePayout": 50.0,
+      "correctPnl": 10.328,
+      "eligibleWhenLifecycleUnsupported": true,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": null
+    },
+    {
+      "id": "R4",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "winner": "Down",
+      "buyNotional": 15.0,
+      "sellNotional": 10.0,
+      "fee": 1.1375,
+      "tradeNetShares": {
+        "Up": 0.0,
+        "Down": 40.0
+      },
+      "legacyTradeOnlyPayout": 40.0,
+      "legacyTradeOnlyPnl": 33.8625,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 0.0,
+        "Down": 40.0
+      },
+      "correctLifecyclePayout": 40.0,
+      "correctPnl": 33.8625,
+      "eligibleWhenLifecycleUnsupported": true,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": null
+    },
+    {
+      "id": "R5",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "winner": "Down",
+      "buyNotional": 6.0,
+      "sellNotional": 13.5,
+      "fee": 0.51975,
+      "tradeNetShares": {
+        "Up": 0.0,
+        "Down": 0.0
+      },
+      "legacyTradeOnlyPayout": 0.0,
+      "legacyTradeOnlyPnl": 6.98025,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 0.0,
+        "Down": 0.0
+      },
+      "correctLifecyclePayout": 0.0,
+      "correctPnl": 6.98025,
+      "eligibleWhenLifecycleUnsupported": true,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": null
+    },
+    {
+      "id": "R6",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "winner": null,
+      "buyNotional": 12.0,
+      "sellNotional": 0.0,
+      "fee": 0.336,
+      "tradeNetShares": {
+        "Up": 20.0,
+        "Down": 0.0
+      },
+      "legacyTradeOnlyPayout": null,
+      "legacyTradeOnlyPnl": null,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": 20.0,
+        "Down": 0.0
+      },
+      "correctLifecyclePayout": null,
+      "correctPnl": null,
+      "eligibleWhenLifecycleUnsupported": false,
+      "eligibleWhenLifecycleSupported": false,
+      "exclusion": "No confirmed resolution"
+    },
+    {
+      "id": "R7",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "winner": "Up",
+      "buyNotional": 0.0,
+      "sellNotional": 7.0,
+      "fee": 0.0,
+      "tradeNetShares": {
+        "Up": -10.0,
+        "Down": 0.0
+      },
+      "legacyTradeOnlyPayout": 0.0,
+      "legacyTradeOnlyPnl": 7.0,
+      "lifecycleCash": 0.0,
+      "correctLifecycleNetShares": {
+        "Up": -10.0,
+        "Down": 0.0
+      },
+      "correctLifecyclePayout": 0.0,
+      "correctPnl": null,
+      "eligibleWhenLifecycleUnsupported": false,
+      "eligibleWhenLifecycleSupported": false,
+      "exclusion": "Missing opening inventory/cost basis"
+    },
+    {
+      "id": "R8",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "winner": "Up",
+      "buyNotional": 8.8,
+      "sellNotional": 0.0,
+      "fee": 0.14,
+      "tradeNetShares": {
+        "Up": 12.0,
+        "Down": 8.0
+      },
+      "legacyTradeOnlyPayout": 12.0,
+      "legacyTradeOnlyPnl": 3.06,
+      "lifecycleCash": 3.0,
+      "correctLifecycleNetShares": {
+        "Up": 9.0,
+        "Down": 5.0
+      },
+      "correctLifecyclePayout": 9.0,
+      "correctPnl": 3.06,
+      "eligibleWhenLifecycleUnsupported": false,
+      "eligibleWhenLifecycleSupported": true,
+      "exclusion": "SPLIT/MERGE require supported inventory accounting or explicit exclusion"
+    }
+  ],
+  "tradeFillCount": 13,
+  "takerFillCount": 8,
+  "makerFillCount": 5,
+  "activityCount": 20,
+  "withoutLifecycleSupport": {
+    "settledEligibleRounds": 5,
+    "pnl": 61.49075,
+    "fees": 4.00925,
+    "wins": 4,
+    "losses": 1,
+    "winRatePercent": 80,
+    "maxDrawdown": 48,
+    "equityAfterEachEligibleRound": [
+      58.32,
+      10.32,
+      20.648,
+      54.5105,
+      61.49075
+    ]
+  },
+  "withLifecycleSupport": {
+    "settledEligibleRounds": 6,
+    "pnl": 64.55075,
+    "fees": 4.14925,
+    "wins": 5,
+    "losses": 1,
+    "winRatePercent": 83.33333333333333,
+    "maxDrawdown": 48,
+    "equityAfterEachEligibleRound": [
+      58.32,
+      10.32,
+      20.648,
+      54.5105,
+      61.49075,
+      64.55075
+    ]
+  },
+  "rebates": {
+    "linkedMaker": 1.25,
+    "linkedTaker": 0.5,
+    "linkedTotal": 1.75,
+    "unallocatedReward": 0.75,
+    "currentEndpointDuplicateMakerAmount": 1.25,
+    "tradingPnlMustRemain": 64.55075,
+    "optionalTradingPlusLinkedRebates": 66.30075
+  },
+  "knownLegacyFailure": {
+    "falseResolvedExtremeQuotePnl": 7.664,
+    "falseMissingInventoryPnl": 7,
+    "unsafeLegacyTotal": 79.21475
+  },
+  "unclaimedWinningShares": 149,
+  "bothSideRoundIds": [
+    "R3",
+    "R8"
+  ]
+}

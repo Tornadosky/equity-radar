@@ -1,0 +1,1210 @@
+--- original.html
++++ website-flattened-for-review.html
+@@ -1,6 +1,8 @@
+ <!doctype html>
+ <html lang="en">
+ <head>
++  <meta name="description" content="BTC 5m trader settlement analysis, equity curve, fill audit and rebates." />
++  <link rel="icon" href="data:," />
+   <meta charset="utf-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1" />
+   <title>Polymarket BTC 5m Equity Radar v5</title>
+@@ -87,7 +89,34 @@
+     .claim-pending { color:var(--amber); } .claim-included { color:var(--muted); } .new-trade td { animation:flash 2.6s ease-out; } @keyframes flash { from { background:rgba(72,245,166,.12); } to { background:transparent; } }
+     @media (max-width: 1120px) { .controls { grid-template-columns:1fr 1fr; } .grid { grid-template-columns:1fr; } .detail-grid-wide { grid-template-columns: repeat(2,minmax(0,1fr)); } .topbar { flex-direction:column; } .status-pill { text-align:left; max-width:100%; } }
+ 
+-  </style>
++  
++    /* D02: honor native hidden on overlays; original display:grid defeated it. */
++    [hidden] { display: none !important; }
++    :focus-visible { outline: 2px solid var(--blue-2); outline-offset: 3px; }
++    .diagnostics > summary { cursor: pointer; list-style: none; }
++    .diagnostics > summary::-webkit-details-marker { display: none; }
++    .diagnostics > summary h2::before { content: '+ '; color: var(--muted); }
++    .diagnostics[open] > summary h2::before { content: '− '; }
++    .diagnostics .metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
++    .rebates-section { padding: 14px 16px 18px; border-top: 1px solid var(--line); }
++    .rebate-controls { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
++    .rebate-controls input { height:34px; }
++    /* D03: original desktop design is retained; phones get usable controls. */
++    @media (max-width:560px) {
++      .controls { grid-template-columns: minmax(0,1fr); }
++      .status-pill { min-width:0; width:100%; }
++      .brand { gap:10px; } .brand > div:last-child { min-width:0; }
++      .sigil { flex-shrink:0; width:44px; height:44px; }
++      h1 { font-size:23px; } .subtitle { line-height:1.5; letter-spacing:.04em; }
++      .chart-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
++      .panel-title { flex-wrap:wrap; } .grid { grid-template-columns:minmax(0,1fr); }
++      .metric-value { font-size:20px; overflow-wrap:anywhere; }
++      .diagnostics .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
++      .tooltip { min-width:160px; max-width:220px; }
++      .toast-wrap { left:14px; right:14px; }
++    }
++    @media (prefers-reduced-motion:reduce) { *, *::before { animation:none !important; } }
++</style>
+ </head>
+ <body>
+   <div class="app">
+@@ -99,7 +128,7 @@
+           <div class="subtitle">BTC 5m · close-settlement P&amp;L · taker/maker fee model · live refresh</div>
+         </div>
+       </div>
+-      <div class="status-pill" id="statusText"><span class="status-dot"></span>Ready. Uses the same settlement logic as the provided script. Equity chart uses the full visible range.</div>
++      <div class="status-pill" id="statusText" role="status" aria-live="polite"><span class="status-dot"></span>Ready. Uses the same settlement logic as the provided script. Equity chart uses the full visible range.</div>
+     </header>
+ 
+     <section class="panel controls">
+@@ -160,7 +189,7 @@
+           <div class="tooltip" id="chartTooltip" hidden></div>
+         </div>
+         <div class="chart-wrap" id="balanceChartWrap">
+-          <canvas id="balanceChart"></canvas>
++          <canvas id="balanceChart" role="img" aria-label="Cumulative settled BTC 5m trading P&amp;L"></canvas>
+           <div class="chart-empty" id="balanceChartEmpty">No cumulative equity yet.</div>
+           <div class="tooltip" id="balanceChartTooltip" hidden></div>
+         </div>
+@@ -208,9 +237,21 @@
+         <table style="min-width:980px"><thead><tr><th>Time</th><th>Round</th><th>Side</th><th>Outcome</th><th>Shares</th><th>Price</th><th>Notional</th><th>Tx</th></tr></thead><tbody id="liveBody"><tr><td colspan="8" class="empty">No fills loaded.</td></tr></tbody></table>
+       </div>
+     </section>
++    <details class="panel table-panel diagnostics" id="traderDiagnostics">
++      <summary class="panel-title"><h2>Trader diagnostics</h2><span class="small" id="diagnosticSummary">Risk, fees, coverage and rebates</span></summary>
++      <div class="metrics" id="diagnosticMetrics"></div>
++      <div class="caption" id="coverageNote"></div>
++      <div class="rebates-section">
++        <div class="current-kicker">Rebates · separate from trading P&amp;L</div>
++        <p class="source" id="rebatePayouts">No wallet loaded</p>
++        <div class="rebate-controls"><div><label for="rebateDate">Maker rebate date (UTC)</label><input type="date" id="rebateDate" /></div><button type="button" class="btn small secondary" id="rebateLoad" disabled>Fetch daily rebates</button></div>
++        <p class="source" id="rebateResult" role="status">Fetch a UTC day for the current visible markets.</p>
++        <div class="source">Daily market rebates and wallet-wide payments are two views of rebate activity. They are never added together. <a href="https://docs.polymarket.com/api-reference/rebates/get-current-rebated-fees-for-a-maker" target="_blank" rel="noopener noreferrer">Rebate source ↗</a></div>
++      </div>
++    </details>
+   </div>
+ 
+-  <dialog id="detailDialog">
++  <dialog id="detailDialog" aria-labelledby="modalTitle">
+     <div class="modal-head">
+       <div><h3 id="modalTitle">Details</h3><div class="modal-sub" id="modalSub"></div></div>
+       <button class="btn small secondary" id="closeModal" type="button">Close</button>
+@@ -223,9 +264,9 @@
+ (() => {
+   'use strict';
+ 
+-  const DATA_API = 'https://data-api.polymarket.com';
+-  const GAMMA_API = 'https://gamma-api.polymarket.com';
+-  const CLOB_API = 'https://clob.polymarket.com';
++  const DATA_API = `${window.location.origin}/api/data`;
++  const GAMMA_API = `${window.location.origin}/api/gamma`;
++  const CLOB_API = `${window.location.origin}/api/clob`;
+   const CRYPTO_TAKER_FEE_RATE = 0.07;
+   const DEFAULT_CRYPTO_FEE = Object.freeze({ rate: CRYPTO_TAKER_FEE_RATE, exponent: 1, takerOnly: true, source: 'crypto default' });
+   const HISTORY_HOURS = 24;
+@@ -233,7 +274,7 @@
+   const SETTLEMENT_REFRESH_MS = 15000;
+   const MARKET_PNL_CONCURRENCY = 6;
+   const ACTIVITY_PAGE_SIZE = 500;
+-  const ACTIVITY_MAX_OFFSET = 1000;
++  const ACTIVITY_MAX_OFFSET = 5000;
+   const TAKER_PAGE_SIZE = 1000;
+   const TAKER_MAX_OFFSET = 9000;
+ 
+@@ -294,6 +335,14 @@
+   };
+ 
+   const state = {
++    generation: 0,
++    takerCoverageEnd: 0,
++    ledgerEvents: [],
++    ledgerComplete: false,
++    ledgerCoverageEnd: 0,
++    rebateRequest: 0,
++    rebateLoading: false,
++    qualityWarnings: [],
+     loading: false,
+     livePolling: false,
+     settlementLoading: false,
+@@ -504,6 +553,7 @@
+   }
+ 
+   async function fetchJson(url, options = {}) {
++    const generation = state.generation;
+     const controller = new AbortController();
+     const timeout = window.setTimeout(() => controller.abort(), options.timeout || 22000);
+     try {
+@@ -515,17 +565,20 @@
+         headers: { 'Accept': 'application/json' },
+         signal: controller.signal
+       });
++      if (generation !== state.generation) throw new Error('Report changed');
+       if (options.allow404 && response.status === 404) return null;
+       if (!response.ok) {
+         let detail = '';
+         try { detail = (await response.text()).slice(0, 180); } catch (_) {}
+         throw new Error(`${options.label || 'API'}: HTTP ${response.status}${detail ? ` — ${detail}` : ''}`);
+       }
+-      return await response.json();
++      const payload = await response.json();
++      if (generation !== state.generation) throw new Error('Report changed');
++      return payload;
+     } catch (error) {
+       if (error?.name === 'AbortError') throw new Error(`${options.label || 'API'}: превышено время ожидания`);
+       if (error instanceof TypeError) {
+-        throw new Error(`${options.label || 'API'} недоступен из браузера. Откройте HTML через localhost или проверьте блокировщик запросов.`);
++        throw new Error(`${options.label || 'API'} недоступен из браузера. Check that this website’s server can reach Polymarket.`);
+       }
+       throw error;
+     } finally {
+@@ -544,9 +597,22 @@
+     };
+   }
+ 
++  function invalidFillReason(t) {
++    if (!t || typeof t !== 'object') return 'Malformed fill';
++    if (!['BUY','SELL'].includes(String(t.side || '').toUpperCase())) return 'Unknown trade side';
++    if (!['Up','Down'].includes(normalizeOutcome(t.outcome))) return 'Unknown outcome';
++    if (nullableNumber(t.price) == null || Number(t.price) <= 0 || Number(t.price) >= 1) return 'Invalid fill price';
++    if (nullableNumber(t.size) == null || Number(t.size) <= 0) return 'Invalid fill size';
++    if (!normalizeTimestamp(t.timestamp)) return 'Missing fill timestamp';
++    if (!/^0x[a-f0-9]{64}$/i.test(String(t.conditionId || ''))) return 'Missing condition ID';
++    if (t.usdcSize != null && (!Number.isFinite(Number(t.usdcSize)) || Number(t.usdcSize) < 0 || Math.abs(Number(t.usdcSize)-Number(t.size)*Number(t.price)) > Math.max(.005,Number(t.size)*Number(t.price)*.005))) return 'Inconsistent fill notional';
++    return '';
++  }
++
+   function normalizeTradeRecord(record) {
+     return {
+       ...record,
++      _invalid: record?._invalid || invalidFillReason(record),
+       timestamp: normalizeTimestamp(record.timestamp),
+       size: asNumber(record.size),
+       price: asNumber(record.price),
+@@ -635,42 +701,49 @@
+     return fetchJson(url.toString(), { label: 'Лента сделок', timeout: 30000 });
+   }
+ 
++  async function fetchActivityWindow(user, sinceSec, endSec, types = ['TRADE']) {
++    let requests = 0, complete = true;
++    const all = [];
++    async function visit(lo, hi) {
++      if (++requests > 400) { complete = false; return; }
++      const url = new URL(`${DATA_API}/activity`);
++      for (const [key,value] of Object.entries({user,start:lo,end:hi,sortBy:'TIMESTAMP',sortDirection:'DESC',limit:ACTIVITY_PAGE_SIZE,offset:0})) url.searchParams.set(key,String(value));
++      url.searchParams.set('type',types.join(','));
++      const first = await fetchJson(url.toString(), {label:'Activity history',timeout:30000});
++      if (!Array.isArray(first)) throw new Error('Activity API returned an invalid response');
++      if (first.length === ACTIVITY_PAGE_SIZE && hi-lo > 300) {
++        const mid = Math.floor((lo+hi)/2);
++        await visit(mid+1,hi); await visit(lo,mid); return;
++      }
++      const rows = [...first];
++      if (first.length === ACTIVITY_PAGE_SIZE) {
++        for (let offset=ACTIVITY_PAGE_SIZE;offset<=ACTIVITY_MAX_OFFSET;offset+=ACTIVITY_PAGE_SIZE) {
++          if (++requests > 400) { complete=false; break; }
++          url.searchParams.set('offset',String(offset));
++          const page = await fetchJson(url.toString(), {label:'Activity history',timeout:30000});
++          if (!Array.isArray(page)) throw new Error('Activity API returned an invalid response');
++          rows.push(...page);
++          if (page.length < ACTIVITY_PAGE_SIZE) break;
++          if (offset === ACTIVITY_MAX_OFFSET) {
++            if (lo < hi) { const mid=Math.floor((lo+hi)/2); await visit(mid+1,hi); await visit(lo,mid); return; }
++            complete=false;
++          }
++        }
++      }
++      all.push(...rows);
++    }
++    await visit(Math.floor(sinceSec),Math.floor(endSec));
++    return {rows:all,complete};
++  }
++
+   async function fetchActivityHistory(user, sinceSec, endSec) {
+-    const all = [];
+-    let cursorEnd = endSec;
+-    let windowCount = 0;
+-    state.truncatedTrades = false;
+-
+-    while (cursorEnd >= sinceSec && windowCount < 80) {
+-      const windowRows = [];
+-      let lastPageWasFull = false;
+-
+-      for (let offset = 0; offset <= ACTIVITY_MAX_OFFSET; offset += ACTIVITY_PAGE_SIZE) {
+-        const page = await fetchActivityPage(user, sinceSec, cursorEnd, offset, ACTIVITY_PAGE_SIZE);
+-        if (!Array.isArray(page)) throw new Error('Лента сделок: неожиданный ответ API');
+-        windowRows.push(...page);
+-        lastPageWasFull = page.length === ACTIVITY_PAGE_SIZE;
+-        if (!lastPageWasFull) break;
+-      }
+-
+-      all.push(...windowRows);
+-      if (!lastPageWasFull || !windowRows.length) break;
+-
+-      const timestamps = windowRows.map(item => normalizeTimestamp(item.timestamp)).filter(Boolean);
+-      const oldest = timestamps.length ? Math.min(...timestamps) : 0;
+-      if (!oldest || oldest <= sinceSec) break;
+-      cursorEnd = oldest - 1;
+-      windowCount++;
+-    }
+-
+-    if (windowCount >= 80) state.truncatedTrades = true;
+-    return dedupeTrades(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec && isBtc5m(row));
++    const result=await fetchActivityWindow(user,sinceSec,endSec);
++    state.truncatedTrades = state.truncatedTrades || !result.complete;
++    return dedupeTrades(result.rows).filter(row=>row.timestamp>=sinceSec && row.timestamp<=endSec && isBtc5m(row));
+   }
+ 
+   async function fetchRecentActivity(user, sinceSec, endSec) {
+-    const page = await fetchActivityPage(user, sinceSec, endSec, 0, 200);
+-    if (!Array.isArray(page)) throw new Error('Live-лента: неожиданный ответ API');
+-    return dedupeTrades(page).filter(isBtc5m);
++    return fetchActivityHistory(user,sinceSec,endSec);
+   }
+ 
+   async function fetchTradesFallback(user, sinceSec) {
+@@ -681,6 +754,8 @@
+       url.searchParams.set('limit', '500');
+       url.searchParams.set('offset', String(offset));
+       url.searchParams.set('takerOnly', 'false');
++      url.searchParams.set('start', String(sinceSec));
++      url.searchParams.set('end', String(Math.floor(Date.now()/1000)));
+       const page = await fetchJson(url.toString(), { label: 'История сделок', timeout: 30000 });
+       if (!Array.isArray(page)) throw new Error('История сделок: неожиданный ответ API');
+       all.push(...page);
+@@ -696,8 +771,10 @@
+     try {
+       return await fetchActivityHistory(user, sinceSec, endSec);
+     } catch (error) {
++      if (error?.message === 'Report changed') throw error;
+       console.warn('Activity endpoint failed, falling back to /trades:', error);
+       toast('Основная лента недоступна — использую резервный endpoint /trades.');
++      state.truncatedTrades = true;
+       return fetchTradesFallback(user, sinceSec);
+     }
+   }
+@@ -706,25 +783,28 @@
+   async function fetchTakerTradeHistory(user, sinceSec, maxOffset = TAKER_MAX_OFFSET) {
+     const all = [];
+     let complete = false;
++    const coverageEnd = Math.floor(Date.now()/1000);
+     for (let offset = 0; offset <= maxOffset; offset += TAKER_PAGE_SIZE) {
+       const url = new URL(`${DATA_API}/trades`);
+       url.searchParams.set('user', user);
+       url.searchParams.set('limit', String(TAKER_PAGE_SIZE));
+       url.searchParams.set('offset', String(offset));
+       url.searchParams.set('takerOnly', 'true');
++      url.searchParams.set('start', String(sinceSec));
++      url.searchParams.set('end', String(coverageEnd));
+       const page = await fetchJson(url.toString(), { label: 'Taker fills', timeout: 30000 });
+       if (!Array.isArray(page)) throw new Error('Taker fills: неожиданный ответ API');
+       all.push(...page);
+       const timestamps = page.map(row => normalizeTimestamp(row.timestamp)).filter(Boolean);
+       const oldest = timestamps.length ? Math.min(...timestamps) : Infinity;
+-      if (page.length < TAKER_PAGE_SIZE || oldest <= sinceSec) {
++      if (page.length < TAKER_PAGE_SIZE) {
+         complete = true;
+         break;
+       }
+     }
+     return {
+       trades: prepareTradeBatch(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec && isBtc5m(row)),
+-      complete
++      complete, coverageEnd
+     };
+   }
+ 
+@@ -758,50 +838,29 @@
+   }
+ 
+   function classifyTakerTrades() {
+-    const exact = countFingerprints(state.takerTrades, true);
+-    const loose = countFingerprints(state.takerTrades, false);
+-    let classified = 0;
+-    let assumed = 0;
+-    state.allTrades = (state.allTrades || []).map(trade => {
+-      const exactKey = takerFingerprint(trade, true);
+-      const looseKey = takerFingerprint(trade, false);
+-      let isTaker = false;
+-      let source = '';
+-      if (consumeFingerprint(exact, exactKey)) {
+-        consumeFingerprint(loose, looseKey);
+-        isTaker = true;
+-        source = 'takerOnly API';
+-        classified++;
+-      } else if (consumeFingerprint(loose, looseKey)) {
+-        isTaker = true;
+-        source = 'takerOnly API · loose match';
+-        classified++;
+-      } else if (state.takerHistoryComplete) {
+-        isTaker = false;
+-        source = 'maker: отсутствует в takerOnly';
+-        classified++;
+-      } else {
+-        isTaker = null;
+-        source = 'предполагается taker: история taker неполная';
+-        assumed++;
+-      }
+-      return { ...trade, _isTaker: isTaker, _takerSource: source };
++    const buckets = new Map();
++    for (const t of state.takerTrades || []) {
++      const key=takerFingerprint(t,false);
++      if (!buckets.has(key)) buckets.set(key,[]);
++      buckets.get(key).push(t);
++    }
++    let classified=0, assumed=0;
++    state.allTrades=(state.allTrades || []).map(trade=>{
++      const pool=buckets.get(takerFingerprint(trade,false)) || [];
++      const exactIndex=pool.findIndex(t=>takerFingerprint(t,true)===takerFingerprint(trade,true));
++      let isTaker=null, source='Unknown role · conservative taker estimate';
++      if (pool.length) { pool.splice(exactIndex<0 ? 0 : exactIndex,1); isTaker=true; source=exactIndex<0?'takerOnly API · timestamp mismatch':'takerOnly API'; classified++; }
++      else if (state.takerHistoryComplete && trade.timestamp<=state.takerCoverageEnd) { isTaker=false; source='Maker · absent from complete taker snapshot'; classified++; }
++      else assumed++;
++      return {...trade,_isTaker:isTaker,_takerSource:source};
+     });
+-    state.takerClassifiedCount = classified;
+-    state.takerAssumedCount = assumed;
++    state.takerClassifiedCount=classified; state.takerAssumedCount=assumed;
+   }
+ 
+   function mergeTakerTrades(existing, incoming) {
+-    const prepared = prepareTradeBatch([...(existing || []), ...(incoming || [])]).filter(isBtc5m);
+-    // Explicit IDs are deduped by prepareTradeBatch. For rows without IDs, remove exact
+-    // duplicates across repeated polling while preserving repeated occurrences inside one response.
+-    const seenKeys = new Set();
+-    return prepared.filter(row => {
+-      const key = tradeKey(row);
+-      if (seenKeys.has(key)) return false;
+-      seenKeys.add(key);
+-      return true;
+-    });
++    const map=new Map();
++    for (const rows of [existing,incoming]) for (const row of prepareTradeBatch(rows || [])) map.set(tradeKey(row),row);
++    return [...map.values()].filter(isBtc5m);
+   }
+ 
+   async function fetchCurrentPositions(user) {
+@@ -932,6 +991,7 @@
+       ]);
+       for (const result of results) {
+         if (result.status !== 'fulfilled') {
++          if (result.reason?.message === 'Report changed') throw result.reason;
+           console.warn('Market batch failed:', result.reason);
+           continue;
+         }
+@@ -951,6 +1011,7 @@
+             const market = await fetchMarketBySlug(slug);
+             if (market) return { market, fallbackId: hint.conditionId };
+           } catch (error) {
++            if (error?.message === 'Report changed') throw error;
+             console.warn(`Slug market fetch failed for ${slug}:`, error);
+           }
+         }
+@@ -959,6 +1020,7 @@
+             const market = await fetchMarketFromEventSlug(hint.eventSlug, hint.conditionId);
+             if (market) return { market, fallbackId: hint.conditionId };
+           } catch (error) {
++            if (error?.message === 'Report changed') throw error;
+             console.warn(`Event market fetch failed for ${hint.eventSlug}:`, error);
+           }
+         }
+@@ -1008,6 +1070,7 @@
+         try {
+           result.set(id, await fetchClobMarketInfo(id));
+         } catch (error) {
++          if (error?.message === 'Report changed') throw error;
+           console.warn(`Fee info failed for ${id}:`, error);
+           result.set(id, null);
+         }
+@@ -1123,6 +1186,7 @@
+   async function verifyMarketPnls(groups, { force = false, silent = false, recentOnly = false } = {}) {
+     if (state.demo || !state.proxyWallet || state.auditLoading) return;
+     const nowSec = Math.floor(Date.now() / 1000);
++    const generation=state.generation, wallet=state.proxyWallet;
+     const unique = new Map();
+     for (const group of groups || []) {
+       const conditionId = String(group.conditionId || '').toLowerCase();
+@@ -1146,6 +1210,7 @@
+     let cursor = 0;
+ 
+     const updateProgress = () => {
++      if (generation!==state.generation) return;
+       if (!silent) setStatus(`Точная сверка P&L по каждому рынку: ${state.auditCompleted}/${targets.length}…`, 'loading');
+       refreshRowsFromCache();
+       renderMetrics();
+@@ -1154,19 +1219,22 @@
+     };
+ 
+     const worker = async () => {
+-      while (cursor < targets.length) {
++      while (generation===state.generation && cursor < targets.length) {
+         const index = cursor++;
+         const group = targets[index];
+         const conditionId = String(group.conditionId).toLowerCase();
+         try {
+-          const result = await fetchExactMarketPnl(state.proxyWallet, conditionId);
++          const result = await fetchExactMarketPnl(wallet, conditionId);
++          if (generation!==state.generation) return;
+           state.marketPnlCache.set(conditionId, result);
+           if (!result.ok) state.auditFailed++;
+         } catch (error) {
++          if (generation!==state.generation) return;
+           state.marketPnlCache.set(conditionId, { ok: false, finalized: false, winner: '', pnl: null, rows: [], reason: error?.message || 'API error', fetchedAt: Date.now() });
+           state.auditFailed++;
+           console.warn(`Exact P&L audit failed for ${conditionId}:`, error);
+         } finally {
++          if (generation!==state.generation) return;
+           state.auditCompleted++;
+           if (state.auditCompleted === targets.length || state.auditCompleted % 4 === 0) updateProgress();
+         }
+@@ -1176,6 +1244,7 @@
+     try {
+       await Promise.all(Array.from({ length: Math.min(MARKET_PNL_CONCURRENCY, targets.length) }, worker));
+     } finally {
++      if (generation!==state.generation) return;
+       state.auditLoading = false;
+       els.audit.disabled = !state.proxyWallet || state.demo;
+       els.audit.textContent = 'Перепроверить P&L';
+@@ -1267,25 +1336,19 @@
+ 
+   function marketWinner(market) {
+     if (!market) return '';
+-    const explicitFields = [
+-      market.winner, market.resolution, market.resolvedOutcome,
+-      market.resolutionOutcome, market.winningOutcome, market.result
+-    ];
+-    for (const value of explicitFields) {
+-      const explicit = normalizeOutcome(value || '');
+-      if (explicit === 'Up' || explicit === 'Down') return explicit;
+-    }
+-    const tokens = Array.isArray(market.tokens) ? market.tokens : parseJsonArray(market.tokens);
+-    const winningToken = tokens.find(token => asBool(token?.winner));
+-    if (winningToken) {
+-      const outcome = normalizeOutcome(winningToken.outcome || winningToken.name || winningToken.label || '');
+-      if (outcome === 'Up' || outcome === 'Down') return outcome;
+-    }
+-    const prices = readOutcomePriceMap(market);
+-    if (prices.Up != null && prices.Down != null && Math.max(prices.Up, prices.Down) >= 0.999 && Math.min(prices.Up, prices.Down) <= 0.001) {
+-      return prices.Up > prices.Down ? 'Up' : 'Down';
+-    }
+-    return '';
++    const candidates = [];
++    for (const v of [market.winner,market.resolution,market.result,market.resolvedOutcome,market.resolutionOutcome,market.winningOutcome]) {
++      const outcome=normalizeOutcome(v); if (['Up','Down'].includes(outcome)) candidates.push(outcome);
++    }
++    for (const token of parseJsonArray(market.tokens)) if (asBool(token?.winner)) candidates.push(normalizeOutcome(token.outcome));
++    const prices=readOutcomePriceMap(market);
++    const finalPair=(prices.Up===1 && prices.Down===0) || (prices.Up===0 && prices.Down===1);
++    const finalStatus=asBool(market.resolved) || String(market.umaResolutionStatus || market.resolutionStatus || '').toLowerCase()==='resolved';
++    if (finalStatus && finalPair) candidates.push(prices.Up===1?'Up':'Down');
++    const valid=[...new Set(candidates.filter(x=>['Up','Down'].includes(x)))];
++    if (valid.length!==1) return '';
++    if (finalPair && valid[0] !== (prices.Up===1?'Up':'Down')) return '';
++    return valid[0];
+   }
+ 
+   function readOutcomePriceMap(market) {
+@@ -1307,31 +1370,17 @@
+     return map;
+   }
+ 
+-  function inferWinnerFromPositions(positionRows, allowFinalPrices = false) {
+-    const candidates = [];
+-    for (const row of positionRows) {
+-      const outcome = normalizeOutcome(row.outcome);
+-      const price = asNumber(row.curPrice ?? row.currPrice, NaN);
+-      const looksFinal = asBool(row.redeemable)
+-        || Boolean(normalizeTimestamp(row.timestamp))
+-        || (row.endDate && Date.parse(row.endDate) <= Date.now())
+-        || (allowFinalPrices && Number.isFinite(price) && (price >= 0.98 || price <= 0.02));
+-      if (!looksFinal || !Number.isFinite(price) || (outcome !== 'Up' && outcome !== 'Down')) continue;
+-      candidates.push({ outcome, price });
+-    }
+-
+-    candidates.sort((a, b) => b.price - a.price);
+-    if (candidates.length && candidates[0].price >= 0.98) return candidates[0].outcome;
+-
+-    for (const row of positionRows) {
+-      const outcome = normalizeOutcome(row.outcome);
+-      const opposite = normalizeOutcome(row.oppositeOutcome);
+-      const price = asNumber(row.curPrice ?? row.currPrice, NaN);
+-      if (!asBool(row.redeemable) || !Number.isFinite(price)) continue;
+-      if (price >= 0.98 && (outcome === 'Up' || outcome === 'Down')) return outcome;
+-      if (price <= 0.02 && (opposite === 'Up' || opposite === 'Down')) return opposite;
+-    }
+-    return '';
++  function inferWinnerFromPositions(positionRows) {
++    const winners = new Set();
++    for (const row of positionRows || []) {
++      if (!asBool(row.redeemable)) continue;
++      const price=nullableNumber(row.curPrice ?? row.currPrice);
++      const outcome=normalizeOutcome(row.outcome);
++      if (!['Up','Down'].includes(outcome)) continue;
++      if (price===1) winners.add(outcome);
++      else if (price===0) winners.add(outcome==='Up'?'Down':'Up');
++    }
++    return winners.size===1 ? [...winners][0] : '';
+   }
+ 
+   function nullableNumber(value) {
+@@ -1348,15 +1397,17 @@
+   function feeConfigForMarket(conditionId, market) {
+     const id = String(conditionId || '').toLowerCase();
+     const info = state.clobMarkets.get(id);
+-    const fd = info?.fd;
++    const fs = market?.feeSchedule;
++    const fd = fs ? {r:fs.rate,e:fs.exponent,to:fs.takerOnly} : info?.fd;
+     const rate = nullableNumber(fd?.r);
+     const exponent = nullableNumber(fd?.e);
+-    if (rate != null && exponent != null) {
++    if (rate != null && rate >= 0 && rate <= 1 && exponent != null && exponent >= 0 && exponent <= 5) {
+       return {
+         rate: Math.max(0, rate), exponent: Math.max(0, exponent),
+-        takerOnly: fd?.to !== false, source: 'CLOB fd', exact: true
++        takerOnly: fd?.to !== false, source: fs ? 'Gamma feeSchedule' : 'CLOB fd', exact: true
+       };
+     }
++    if (fd && (rate == null || exponent == null || rate<0 || rate>1 || exponent<0 || exponent>5)) return {...DEFAULT_CRYPTO_FEE, exact:false, invalid:true, source:'Invalid fee metadata'};
+     const feeFlag = market?.feesEnabled ?? market?.fees_enabled;
+     if (feeFlag !== undefined && !asBool(feeFlag)) {
+       return { rate: 0, exponent: 1, takerOnly: true, source: 'Gamma: fees disabled', exact: true };
+@@ -1365,7 +1416,7 @@
+   }
+ 
+   function feeForTrade(trade, feeConfig) {
+-    if (trade?._isTaker === false) return 0;
++    if (trade?._isTaker === false && feeConfig?.takerOnly !== false) return 0;
+     const rate = Math.max(0, asNumber(feeConfig?.rate));
+     const exponent = Math.max(0, asNumber(feeConfig?.exponent, 1));
+     const size = Math.max(0, asNumber(trade?.size));
+@@ -1386,8 +1437,10 @@
+     let makerCount = 0;
+     let assumedTakerCount = 0;
+     const fillBreakdown = [];
+-
+-    for (const trade of trades || []) {
++    let pathInventoryGap=false;
++    const chronological=(trades || []).slice().sort((a,b)=>a.timestamp-b.timestamp || (a.side==='BUY'?-1:1));
++
++    for (const trade of chronological) {
+       const outcome = normalizeOutcome(trade.outcome);
+       const side = String(trade.side || 'BUY').toUpperCase();
+       const size = Math.max(0, asNumber(trade.size));
+@@ -1410,6 +1463,7 @@
+         cashFlow = -(notional + fee);
+         if (outcome === 'Up' || outcome === 'Down') shares[outcome] += size;
+       }
++      pathInventoryGap ||= shares.Up < -0.00001 || shares.Down < -0.00001;
+       totalFee += fee;
+       fillBreakdown.push({
+         key: tradeKey(trade), trade, side, outcome, size,
+@@ -1421,7 +1475,7 @@
+ 
+     shares.Up = roundTo(shares.Up, 8);
+     shares.Down = roundTo(shares.Down, 8);
+-    const inventoryGap = shares.Up < -0.00001 || shares.Down < -0.00001;
++    const inventoryGap = pathInventoryGap || shares.Up < -0.00001 || shares.Down < -0.00001;
+     const winningShares = winner === 'Up' ? Math.max(0, shares.Up) : winner === 'Down' ? Math.max(0, shares.Down) : 0;
+     const payout = roundTo(winningShares, 8);
+     const cashFlow = roundTo(sellCash - buyCash, 8);
+@@ -1627,13 +1681,14 @@
+       const isPastEnd = nowSec >= endSec;
+ 
+       const closePrices = readOutcomePriceMap(market);
+-      const pairFinal = closePrices.Up != null && closePrices.Down != null
+-        && Math.max(closePrices.Up, closePrices.Down) >= 0.999
+-        && Math.min(closePrices.Up, closePrices.Down) <= 0.001;
++      const pairFinal = (closePrices.Up === 1 && closePrices.Down === 0)
++        || (closePrices.Up === 0 && closePrices.Down === 1);
+       const winnerFromMarket = marketWinner(market);
+       const winnerFromVerified = verified?.winner || inferWinnerFromPositions(verifiedRows, true);
+       const winnerFromPositions = inferWinnerFromPositions([...currentConditionRows, ...closedConditionRows], true);
+-      const winner = winnerFromMarket || winnerFromVerified || winnerFromPositions;
++      const winnerEvidence = [...new Set([winnerFromMarket,winnerFromVerified,winnerFromPositions].filter(Boolean))];
++      const resolutionConflict = winnerEvidence.length > 1;
++      const winner = resolutionConflict ? '' : winnerEvidence[0] || '';
+       const resolved = Boolean(isPastEnd && (winner === 'Up' || winner === 'Down')
+         && (winnerFromMarket || winnerFromVerified || winnerFromPositions || pairFinal));
+       const marketClosed = market ? asBool(market.closed) || market.active === false : false;
+@@ -1642,7 +1697,18 @@
+ 
+       const feeConfig = feeConfigForMarket(conditionId, market);
+       const settlement = resolved ? calculateRoundSettlement(group.trades, winner, feeConfig) : null;
+-      const pnl = settlement?.pnl ?? null;
++      const qualityIssues=[];
++      if (Object.values(closePrices).some(p=>p!=null && (p<0 || p>1))) qualityIssues.push('Invalid outcome price evidence');
++      if (feeConfig.invalid) qualityIssues.push('Invalid fee metadata');
++      if (resolutionConflict) qualityIssues.push('Conflicting resolution evidence');
++      const invalid=group.trades.find(t=>t._invalid || invalidFillReason(t));
++      if (invalid) qualityIssues.push(invalid._invalid || invalidFillReason(invalid));
++      if (settlement?.inventoryGap) qualityIssues.push('Missing opening inventory');
++      if (state.truncatedTrades) qualityIssues.push('Incomplete trade history');
++      if (group.startSec < state.historySinceSec) qualityIssues.push('Start date cuts this round');
++      if (state.ledgerEvents.some(e=>String(e.conditionId || '').toLowerCase()===conditionId && ['SPLIT','MERGE','CONVERSION'].includes(e.type))) qualityIssues.push('Non-trade inventory event');
++      const excluded=qualityIssues.length>0;
++      const pnl = excluded ? null : settlement?.pnl ?? null;
+ 
+       const aggregateApi = apiPnlForGroup(group, currentIndex, closedIndex);
+       const expectedLegs = [];
+@@ -1656,6 +1722,7 @@
+         expectedLegs.push({ asset, outcome });
+       }
+       const verifiedFound = expectedLegs.filter(leg => verifiedRows.some(row => {
++        if (positionTotalPnl(row)==null) return false;
+         if (leg.asset && String(row.asset || '') === leg.asset) return true;
+         return !leg.asset && normalizeOutcome(row.outcome) === leg.outcome;
+       })).length;
+@@ -1679,19 +1746,19 @@
+       const apiLooksStale = Boolean(apiCandidate != null && pnl != null && Math.abs(apiCandidate) <= 0.005 && Math.abs(pnl) > tolerance);
+       let auditStatus = 'no-api';
+       if (reconciliationDelta != null) {
+-        if (apiLooksStale) auditStatus = 'stale-zero';
++        if (apiLooksStale) auditStatus = 'mismatch';
+         else if (Math.abs(reconciliationDelta) <= tolerance) auditStatus = 'verified';
+         else auditStatus = 'mismatch';
+       }
+ 
+       const classificationExact = !settlement || feeConfig.rate <= 0 || settlement.assumedTakerCount === 0;
+-      const calculationExact = Boolean(resolved && feeConfig.exact && classificationExact && !settlement?.inventoryGap);
++      const calculationExact = Boolean(resolved && !excluded && (state.demo || (state.ledgerComplete && state.ledgerCoverageEnd >= endSec)) && feeConfig.exact && classificationExact && !settlement?.inventoryGap);
+       const approximate = Boolean(resolved && !calculationExact);
+       const pnlSource = !resolved
+         ? ''
+         : `закрытие ${winner}=1 · fills · ${feeConfig.source}${settlement?.assumedTakerCount ? ' · assumed taker' : ''}`;
+       const claimInfo = payoutClaimInfo(currentConditionRows, winner, settlement?.payout || 0);
+-      const resolutionSource = pairFinal
++      const resolutionSource = pairFinal && winnerFromMarket
+         ? 'Gamma outcomePrices 1/0'
+         : winnerFromMarket ? 'Gamma resolved winner'
+           : winnerFromVerified ? 'market-positions final prices'
+@@ -1699,7 +1766,7 @@
+ 
+       return {
+         ...group,
+-        up, down, market, winner, resolved, isPastEnd, endSec, marketClosed,
++        up, down, market, winner, resolved, isPastEnd, endSec, marketClosed, qualityIssues, excluded,
+         closeUpPrice, closeDownPrice, rawCloseUpPrice: closePrices.Up, rawCloseDownPrice: closePrices.Down,
+         resolutionSource,
+         pnl, pnlSource, pnlMethod: 'close-settlement-v2', pnlQuality: calculationExact ? 'calculated' : 'provisional',
+@@ -1802,7 +1869,8 @@
+       if (row.auditStatus === 'verified') auditBadge = '<span class="badge exact">API ✓</span>';
+       else if (row.auditStatus === 'stale-zero') auditBadge = '<span class="badge wait">0 API отклонён</span>';
+       else if (row.auditStatus === 'mismatch') auditBadge = '<span class="badge down">расхождение</span>';
+-      if (row.approximate) auditBadge += '<span class="badge approx" style="margin-left:4px">fee/taker fallback</span>';
++      if (row.excluded) auditBadge = '<span class="badge down">Excluded from equity</span>';
++      if (row.approximate && !row.excluded) auditBadge += '<span class="badge approx" style="margin-left:4px">fee/taker fallback</span>';
+       const settlementPrimary = row.resolved ? fmtMoney(row.payout) : '—';
+       const closeText = row.resolved ? `${row.winner}=1 · loser=0` : 'ожидаем final 1/0';
+       return `
+@@ -1821,7 +1889,7 @@
+           <td><div class="audit-delta ${deltaClass}">${delta == null ? '—' : fmtMoney(delta, true)}</div><div class="source">официальный API − close calc</div></td>
+           <td>
+             <div class="pnl ${pnlClass}">${pnlText}</div>
+-            <div class="source">${escapeHtml(row.pnlSource || (row.isPastEnd ? 'ожидаем финальную цену' : 'текущий раунд'))}</div>
++            <div class="source">${escapeHtml(row.qualityIssues?.join(' · ') || row.pnlSource || (row.isPastEnd ? 'ожидаем финальную цену' : 'текущий раунд'))}</div>
+             <div style="margin-top:5px">${auditBadge}</div>
+           </td>
+           <td><button class="btn small detail-btn" type="button" data-key="${escapeHtml(row.key)}">Детали</button></td>
+@@ -1833,7 +1901,7 @@
+   }
+ 
+   function renderMetrics() {
+-    const all = getPeriodRows();
++    const all = getVisibleRows();
+     const resolved = all.filter(row => row.resolved && row.pnl != null);
+     const exactCalc = resolved.filter(row => row.calculationExact);
+     const provisional = resolved.filter(row => !row.calculationExact);
+@@ -1851,10 +1919,10 @@
+     els.totalPnl.textContent = resolved.length ? `${provisional.length ? '≈ ' : ''}${fmtMoney(totalPnl, true)}` : '—';
+     els.totalPnl.className = `metric-value ${totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral'}`;
+     els.pnlNote.textContent = resolved.length
+-      ? `${exactCalc.length} close‑точно${provisional.length ? ` · ${provisional.length} fallback` : ''} · API✓ ${apiVerified}${staleZeros ? ` · 0 API× ${staleZeros}` : ''}${mismatches ? ` · Δ ${mismatches}` : ''}${unclaimed ? ` · ${unclaimed} unclaimed` : ''}`
++      ? `${exactCalc.length} model complete${provisional.length ? ` · ${provisional.length} fallback` : ''} · API✓ ${apiVerified}${staleZeros ? ` · 0 API× ${staleZeros}` : ''}${mismatches ? ` · Δ ${mismatches}` : ''}${unclaimed ? ` · ${unclaimed} unclaimed` : ''}`
+       : 'нет завершённых раундов';
+     els.roundCount.textContent = all.length ? `${all.length} / ${resolved.length}` : '—';
+-    els.roundNote.textContent = state.truncatedTrades ? 'часть старых fills могла не загрузиться' : `${periodLabel()}: найдено / рассчитано`;
++    els.roundNote.textContent = all.some(r=>r.excluded) ? `${all.filter(r=>r.excluded).length} excluded · inspect row reasons` : state.truncatedTrades ? 'часть старых fills могла не загрузиться' : `${periodLabel()}: найдено / рассчитано`;
+     els.upVolume.textContent = all.length ? fmtCompactMoney(upVolume) : '—';
+     els.upNote.textContent = `${upOps} buy tx`;
+     els.downVolume.textContent = all.length ? fmtCompactMoney(downVolume) : '—';
+@@ -1898,7 +1966,7 @@
+   function renderLiveFeed() {
+     cleanupNewTradeKeys();
+     const countValue = els.liveCount.value;
+-    const maxRows = countValue === 'all' ? 500 : Number(countValue) || 50;
++    const maxRows = countValue === 'all' ? Infinity : Number(countValue) || 50;
+     const trades = state.allTrades
+       .filter(isBtc5m)
+       .slice()
+@@ -1935,7 +2003,7 @@
+   }
+ 
+   function setLiveUi(kind = '') {
+-    const enabled = els.autoRefresh.checked && !state.demo;
++    const enabled = els.autoRefresh.checked && !state.demo && Boolean(state.proxyWallet);
+     els.liveToggle.textContent = enabled ? 'Пауза' : state.demo ? 'Демо' : 'Продолжить';
+     els.liveToggle.disabled = state.demo || !state.proxyWallet;
+     els.livePulse.className = `live-pulse${kind ? ` ${kind}` : enabled ? ' ok' : ' paused'}`;
+@@ -1953,7 +2021,7 @@
+   }
+ 
+   function getDailyChartRows() {
+-    return getPeriodRows()
++    return getVisibleRows()
+       .filter(row => row.resolved && row.pnl != null)
+       .sort((a, b) => a.endSec - b.endSec);
+   }
+@@ -1997,8 +2065,8 @@
+     els.dayAverage.textContent = allRows.length ? fmtMoney(average, true) : '—';
+     els.dayAverage.className = `chart-stat-value ${average > 0 ? 'positive' : average < 0 ? 'negative' : ''}`;
+     els.dayWinRate.textContent = allRows.length ? `${winRate.toFixed(1)}%` : '—';
+-    els.dayAudit.textContent = allRows.length ? (Math.abs(auditDelta) < 0.000001 ? '✓ совпало' : fmtMoney(auditDelta, true)) : '—';
+-    els.dayAudit.className = `chart-stat-value ${allRows.length && Math.abs(auditDelta) < 0.000001 ? 'positive' : allRows.length ? 'negative' : ''}`;
++    els.dayAudit.textContent = allRows.length ? `${verified}/${allRows.length} API ✓` : '—';
++    els.dayAudit.className = `chart-stat-value ${verified===allRows.length && verified ? 'positive' : 'neutral'}`;
+     els.dayAudit.title = allRows.length ? `Σ точек ${fmtMoney(total, true)} · конец cumulative ${fmtMoney(endpoint, true)}` : '';
+   }
+ 
+@@ -2019,7 +2087,7 @@
+     empty.hidden = true;
+     canvas.style.opacity = '1';
+     const wrapRect = wrap.getBoundingClientRect();
+-    const width = Math.max(320, Math.floor(wrapRect.width));
++    const width = Math.max(220, Math.floor(wrapRect.width - 24));
+     const height = Math.max(280, Math.min(370, Math.floor(width * 0.34)));
+     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+     canvas.style.width = `${width}px`;
+@@ -2046,7 +2114,8 @@
+     if (min === max) { min -= 1; max += 1; }
+     const pad = Math.max((max - min) * 0.12, 0.35);
+     min -= pad; max += pad;
+-    const xFor = index => points.length === 1 ? margin.left + plotW / 2 : margin.left + index / (points.length - 1) * plotW;
++    const firstTime = timeOf(points[0]), lastTime = timeOf(points.at(-1));
++    const xFor = index => lastTime===firstTime ? margin.left+plotW/2 : margin.left+(timeOf(points[index])-firstTime)/(lastTime-firstTime)*plotW;
+     const yFor = value => margin.top + (max - value) / (max - min) * plotH;
+ 
+     ctx.font = '11px Inter, system-ui, sans-serif';
+@@ -2132,7 +2201,7 @@
+     const maxDrawdown = calculateMaxDrawdownFromPoints(cumulative);
+     const startLabel = axisDateTimeFmt.format(new Date(getEquityChartStartSec() * 1000));
+     const endLabel = axisDateTimeFmt.format(new Date((cumulative.at(-1)?.timestamp || Math.floor(Date.now() / 1000)) * 1000));
+-    els.chartCaption.textContent = `Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
++    els.chartCaption.textContent = `Settled trading P&L from $0, not wallet balance. Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
+   }
+ 
+   function renderChart() {
+@@ -2206,6 +2275,7 @@
+   }
+ 
+   function render() {
++    renderDiagnostics();
+     renderMetrics();
+     renderRows();
+     renderCurrentRound();
+@@ -2267,6 +2337,7 @@
+           : 'официальный P&L ещё не заполнен';
+ 
+     els.modalBody.innerHTML = `
++      ${row.excluded ? `<div class="formula negative">Excluded from equity: ${escapeHtml(row.qualityIssues.join(" · "))}. Raw fills remain below.</div>` : ""}
+       <div class="detail-grid detail-grid-wide">
+         <div class="detail-box"><div class="detail-label">Финальный исход</div><div class="detail-value">${resultBadge(row)}</div><div class="source">Up ${row.closeUpPrice ?? '—'} · Down ${row.closeDownPrice ?? '—'}</div></div>
+         <div class="detail-box"><div class="detail-label">P&amp;L по закрытию</div><div class="detail-value ${pnlClass}">${p}</div></div>
+@@ -2304,7 +2375,7 @@
+       'api_pnl_usdc','api_minus_calculation_usdc','audit_status','claim_status','redeemable_winning_shares',
+       'up_buy_ops','up_buy_fills','up_buy_usdc','up_buy_shares','up_sell_ops','up_sell_usdc','net_up_shares',
+       'down_buy_ops','down_buy_fills','down_buy_usdc','down_buy_shares','down_sell_ops','down_sell_usdc','net_down_shares',
+-      'taker_fills','maker_fills','assumed_taker_fills','condition_id'
++      'taker_fills','maker_fills','assumed_taker_fills','condition_id','excluded','quality_issues'
+     ];
+     const lines = [headers];
+     for (const row of rows) {
+@@ -2315,10 +2386,10 @@
+         row.claimInfo?.status || '', row.claimInfo?.redeemableShares || 0,
+         row.up.buyOps, row.up.buyFills, row.up.buyNotional, row.up.buyShares, row.up.sellOps, row.up.sellNotional, row.netSharesUp,
+         row.down.buyOps, row.down.buyFills, row.down.buyNotional, row.down.buyShares, row.down.sellOps, row.down.sellNotional, row.netSharesDown,
+-        row.settlement?.takerCount || 0, row.settlement?.makerCount || 0, row.settlement?.assumedTakerCount || 0, row.conditionId
++        row.settlement?.takerCount || 0, row.settlement?.makerCount || 0, row.settlement?.assumedTakerCount || 0, row.conditionId, row.excluded, row.qualityIssues.join('; ')
+       ]);
+     }
+-    return '\uFEFF' + lines.map(cols => cols.map(value => `"${String(value).replaceAll('"','""')}"`).join(',')).join('\r\n');
++    return '\uFEFF' + lines.map(cols => cols.map(value => `"${(typeof value === 'string' && /^[\s]*[=+@\-]/.test(value) ? "'"+value : String(value)).replaceAll('"','""')}"`).join(',')).join('\r\n');
+   }
+ 
+   function exportCsv() {
+@@ -2332,14 +2403,22 @@
+     document.body.appendChild(a);
+     a.click();
+     a.remove();
+-    URL.revokeObjectURL(url);
++    const notice=document.createElement('div');
++    notice.className='toast';
++    notice.append('CSV ready. ');
++    const link=document.createElement('a');
++    link.href=url; link.download=a.download; link.textContent='Download CSV';
++    notice.appendChild(link); els.toastWrap.appendChild(notice);
++    window.setTimeout(()=>{URL.revokeObjectURL(url);notice.remove();},60000);
+   }
+ 
+   function setLoading(loading, silent = false) {
+     state.loading = loading;
+     els.load.disabled = loading;
+     els.wallet.disabled = loading;
+-    if (!silent) els.load.innerHTML = loading ? '<span class="spinner"></span>Загрузка…' : 'Загрузить отчёт';
++    els.demo.disabled = loading;
++    els.audit.disabled = loading || state.demo || !state.proxyWallet;
++    if (!silent) els.load.innerHTML = loading ? '<span class="spinner"></span>Загрузка…' : 'Load report';
+   }
+ 
+   function initializeTradeState(trades) {
+@@ -2357,16 +2436,32 @@
+       if (!silent) toast('Не найден корректный адрес формата 0x…', 'error');
+       return;
+     }
++    const nowSec = Math.floor(Date.now() / 1000);
++    const requestedSince = getHistorySinceSec();
++    if (!Number.isFinite(requestedSince) || requestedSince <= 0 || requestedSince >= nowSec) {
++      if (!silent) toast('Start date must be before the current time.', 'error');
++      return;
++    }
++    const generation = ++state.generation;
++    els.dialog.close();
++    invalidateRebates();
++    state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
+     setLoading(true, silent);
+     state.demo = false;
++    state.truncatedTrades=false;
++    state.ledgerEvents=[]; state.ledgerComplete=false; state.ledgerCoverageEnd=0; state.qualityWarnings=[];
++    state.rows=[]; state.allTrades=[]; state.currentPositions=[]; state.closedPositions=[]; state.markets=new Map();
++    state.proxyWallet=''; state.lastTradeTimestamp=0; state.lastLiveAt=0;
++    document.getElementById('rebateResult').textContent='Fetch a UTC day for the current visible markets.';
++    els.resolvedAddress.textContent='—'; els.lastUpdated.textContent='Loading';
++    render();
+     state.marketPnlCache = new Map();
+     state.clobMarkets = new Map();
+     state.takerTrades = [];
+     state.takerHistoryComplete = false;
+     state.auditCompleted = 0;
+     state.auditFailed = 0;
+-    const nowSec = Math.floor(Date.now() / 1000);
+-    const sinceSec = getHistorySinceSec();
++    const sinceSec = Math.floor(requestedSince / 300) * 300;
+     if (!Number.isFinite(sinceSec) || sinceSec <= 0 || sinceSec >= nowSec) {
+       if (!silent) toast('Start date must be before the current time.', 'error');
+       setLoading(false, silent);
+@@ -2385,13 +2480,21 @@
+         fetchTradeHistory(profile.proxyWallet, sinceSec, nowSec),
+         fetchTakerTradeHistory(profile.proxyWallet, sinceSec),
+         fetchCurrentPositions(profile.proxyWallet),
+-        fetchClosedPositions(profile.proxyWallet, sinceSec, 200)
++        fetchClosedPositions(profile.proxyWallet, sinceSec, 200),
++        fetchLedgerActivity(profile.proxyWallet,sinceSec,nowSec)
+       ]);
++      if (generation !== state.generation) return;
+       if (dataResults[0].status !== 'fulfilled') throw dataResults[0].reason;
+       const trades = dataResults[0].value;
++      state.ledgerEvents=dataResults[4].status==='fulfilled' ? dataResults[4].value.rows : [];
++      state.ledgerCoverageEnd=nowSec;
++      state.ledgerComplete=dataResults[4].status==='fulfilled' && dataResults[4].value.complete;
++      if (!state.ledgerComplete) state.qualityWarnings.push('Inventory-event / rebate history unavailable or incomplete');
++      for (const [i,label] of [[1,'Maker/taker history'],[2,'Open positions'],[3,'Closed positions']]) if (dataResults[i].status==='rejected') state.qualityWarnings.push(`${label} unavailable`);
+       const takerResult = dataResults[1].status === 'fulfilled' ? dataResults[1].value : { trades: [], complete: false };
+       state.takerTrades = takerResult.trades;
+       state.takerHistoryComplete = Boolean(takerResult.complete);
++      state.takerCoverageEnd = takerResult.coverageEnd || 0;
+       state.currentPositions = dataResults[2].status === 'fulfilled' ? dataResults[2].value : [];
+       state.closedPositions = dataResults[3].status === 'fulfilled' ? dataResults[3].value : [];
+       if (dataResults[1].status === 'rejected') console.warn('Taker classification unavailable; market orders will be treated as taker:', dataResults[1].reason);
+@@ -2402,6 +2505,7 @@
+       const groups = buildGroups(state.allTrades, sinceSec);
+       if (!silent) setStatus(`Найдено ${groups.length} BTC 5m раундов. Проверяю final 1/0 и fee‑параметры…`, 'loading');
+       const marketResults = await Promise.allSettled([fetchMarkets(groups), fetchClobMarketInfos(groups)]);
++      if (generation !== state.generation) return;
+       state.markets = marketResults[0].status === 'fulfilled' ? marketResults[0].value : new Map();
+       state.clobMarkets = marketResults[1].status === 'fulfilled' ? marketResults[1].value : new Map();
+       if (marketResults[0].status === 'rejected') throw marketResults[0].reason;
+@@ -2410,7 +2514,9 @@
+       refreshRowsFromCache();
+       render();
+       await verifyMarketPnls(groups, { force: true, silent });
++      if (generation!==state.generation) return;
+       refreshRowsFromCache();
++      if (generation !== state.generation) return;
+       state.lastLoadAt = Date.now();
+       state.lastSettlementAt = Date.now();
+       storageSet('pm-btc5m-address', inputAddress);
+@@ -2429,13 +2535,16 @@
+       render();
+       if (!silent && state.truncatedTrades) toast('На счёте очень много fills; часть самых старых записей могла не попасть в выбранный период.');
+     } catch (error) {
++      if (generation !== state.generation) return;
++      state.proxyWallet=''; state.rows=[]; state.allTrades=[]; render();
+       console.error(error);
+       setStatus(error.message || 'Не удалось загрузить данные', 'error');
+       if (!silent) toast(error.message || 'Ошибка загрузки', 'error');
+       setLiveUi('error');
+     } finally {
++      if (generation!==state.generation) return;
+       setLoading(false, silent);
+-      els.load.innerHTML = 'Загрузить отчёт';
++      els.load.innerHTML = 'Load report';
+     }
+   }
+ 
+@@ -2462,10 +2571,12 @@
+   async function pollLiveTrades() {
+     if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.livePolling || document.visibilityState !== 'visible') return;
+     state.livePolling = true;
++    const generation=state.generation;
+     try {
+       const endSec = Math.floor(Date.now() / 1000);
+       const startSec = Math.max(state.historySinceSec, (state.lastTradeTimestamp || endSec - 300) - 120);
+       const recent = await fetchRecentActivity(state.proxyWallet, startSec, endSec);
++      if (generation!==state.generation) return;
+       const newRows = mergeLiveTrades(recent);
+       state.lastLiveAt = Date.now();
+ 
+@@ -2476,7 +2587,8 @@
+         });
+         if (newMarketHints.length) {
+           const updates = await Promise.allSettled([fetchMarkets(newMarketHints), fetchClobMarketInfos(newMarketHints)]);
+-          if (updates[0].status === 'fulfilled') state.markets = mergeMarketMaps(state.markets, updates[0].value);
++          if (generation!==state.generation) return;
++        if (updates[0].status === 'fulfilled') state.markets = mergeMarketMaps(state.markets, updates[0].value);
+           if (updates[1].status === 'fulfilled') state.clobMarkets = mergeMarketMaps(state.clobMarkets, updates[1].value);
+         }
+         refreshRowsFromCache();
+@@ -2489,48 +2601,62 @@
+         setLiveUi('ok');
+       }
+     } catch (error) {
++      if (generation!==state.generation) return;
+       console.warn('Live poll failed:', error);
+       setLiveUi('error');
+       els.liveStatus.textContent = 'Ошибка live-ленты · повтор через 2,5 с';
+     } finally {
+-      state.livePolling = false;
++      if (generation===state.generation) state.livePolling = false;
+     }
+   }
+ 
+   async function refreshSettlementData() {
+     if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.settlementLoading || document.visibilityState !== 'visible') return;
+     state.settlementLoading = true;
++    const generation=state.generation;
+     try {
+       const nowSec = Math.floor(Date.now() / 1000);
+       const recentClosedSince = nowSec - 3 * 3600;
+       const positionResults = await Promise.allSettled([
+         fetchCurrentPositions(state.proxyWallet),
+         fetchClosedPositions(state.proxyWallet, recentClosedSince, 10),
+-        fetchTakerTradeHistory(state.proxyWallet, recentClosedSince, 2000)
++        fetchTakerTradeHistory(state.proxyWallet, state.historySinceSec, 9000),
++        fetchLedgerActivity(state.proxyWallet,state.historySinceSec,nowSec)
+       ]);
++      if (generation!==state.generation) return;
+       if (positionResults[0].status === 'fulfilled') state.currentPositions = positionResults[0].value;
+       if (positionResults[1].status === 'fulfilled') state.closedPositions = mergePositionRows(state.closedPositions, positionResults[1].value);
+       if (positionResults[2].status === 'fulfilled') {
+         state.takerTrades = mergeTakerTrades(state.takerTrades, positionResults[2].value.trades);
++        state.takerHistoryComplete=positionResults[2].value.complete;
++        state.takerCoverageEnd=positionResults[2].value.coverageEnd;
+         classifyTakerTrades();
+       }
++      if (positionResults[3].status==='fulfilled') {
++        state.ledgerEvents=positionResults[3].value.complete ? positionResults[3].value.rows : mergeLedgerEvents(state.ledgerEvents,positionResults[3].value.rows);
++        state.ledgerCoverageEnd=nowSec;
++        state.ledgerComplete=positionResults[3].value.complete;
++      } else { state.ledgerComplete=false; }
+ 
+       const marketsToRefresh = state.rows.filter(row => !row.resolved || row.endSec >= nowSec - 1800);
+       if (marketsToRefresh.length) {
+         const updates = await Promise.allSettled([fetchMarkets(marketsToRefresh), fetchClobMarketInfos(marketsToRefresh)]);
++        if (generation!==state.generation) return;
+         if (updates[0].status === 'fulfilled') state.markets = mergeMarketMaps(state.markets, updates[0].value);
+         if (updates[1].status === 'fulfilled') state.clobMarkets = mergeMarketMaps(state.clobMarkets, updates[1].value);
+       }
+       refreshRowsFromCache();
+       await verifyMarketPnls(buildGroups(state.allTrades, state.historySinceSec), { silent: true, recentOnly: true });
++      if (generation!==state.generation) return;
+       refreshRowsFromCache();
+       state.lastSettlementAt = Date.now();
+       els.lastUpdated.textContent = `P&L ${new Date().toLocaleTimeString('ru-RU')}`;
+-      renderMetrics(); renderRows(); renderCurrentRound(); renderChart();
++      renderMetrics(); renderRows(); renderCurrentRound(); renderChart(); renderDiagnostics();
+     } catch (error) {
++      if (generation!==state.generation) return;
+       console.warn('Settlement refresh failed:', error);
+     } finally {
+-      state.settlementLoading = false;
++      if (generation===state.generation) state.settlementLoading = false;
+     }
+   }
+ 
+@@ -2561,7 +2687,7 @@
+       asset: `${roundStart}-${outcome}`,
+       conditionId: `0x${String(roundStart).padStart(64, '0')}`,
+       size: roundTo(size, 5), price: roundTo(price, 4), usdcSize: roundTo(size * price, 8),
+-      timestamp: roundStart + 18 + index * 13,
++      timestamp: roundStart + 18 + (index % 10) * 13,
+       title: `Bitcoin Up or Down — demo ${shortTimeFmt.format(new Date(roundStart * 1000))}`,
+       slug: `btc-updown-5m-${roundStart}`, eventSlug: `btc-updown-5m-${roundStart}`,
+       outcome, side, transactionHash: `0x${String(roundStart + index).padStart(64, 'a')}`
+@@ -2581,7 +2707,7 @@
+         trades.push(makeTrade(start, outcome, 'SELL', Math.max(1, bought * .25), .28 + random() * .58, i * 10 + 3));
+       }
+       markets.set(condition, {
+-        conditionId: condition, closed: true, active: false, feesEnabled: true,
++        conditionId: condition, closed: true, resolved: true, active: false, feesEnabled: true,
+         outcomes: '["Up","Down"]', outcomePrices: winner === 'Up' ? '["1","0"]' : '["0","1"]'
+       });
+       clobMarkets.set(condition, { fd: { r: 0.07, e: 1, to: true } });
+@@ -2596,6 +2722,17 @@
+ 
+   function showDemo() {
+     const demo = demoData();
++    state.generation++;
++    els.dialog.close();
++    invalidateRebates();
++    state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
++    state.truncatedTrades=false;
++    state.ledgerEvents=[];
++    state.ledgerComplete=true;
++    state.ledgerCoverageEnd=Infinity;
++    state.qualityWarnings=[];
++    state.takerCoverageEnd=Infinity;
++    document.getElementById('rebateResult').textContent='Demo has no real rebate records.';
+     state.demo = true;
+     state.proxyWallet = 'demo';
+     state.inputAddress = '';
+@@ -2647,6 +2784,90 @@
+     render();
+   }
+ 
++  async function fetchLedgerActivity(user,startSec,endSec) {
++    const result=await fetchActivityWindow(user,startSec,endSec,['SPLIT','MERGE','CONVERSION','MAKER_REBATE','TAKER_REBATE']);
++    if (result.rows.some(r=>!r || !normalizeTimestamp(r.timestamp) || !['SPLIT','MERGE','CONVERSION','MAKER_REBATE','TAKER_REBATE'].includes(r.type) || (['MAKER_REBATE','TAKER_REBATE'].includes(r.type) && (nullableNumber(r.usdcSize)==null || Number(r.usdcSize)<0)))) throw new Error('Invalid inventory / rebate activity');
++    return result;
++  }
++
++  function mergeLedgerEvents(existing,incoming) {
++    const map=new Map();
++    for (const e of [...existing,...incoming]) map.set([e.type,e.transactionHash,e.timestamp,e.conditionId,e.asset,e.usdcSize,e.size].join('|'),e);
++    return [...map.values()];
++  }
++
++  function invalidateRebates() {
++    state.rebateRequest++; state.rebateLoading=false; state.dailyRebateRows=[];
++    document.getElementById('rebateResult').textContent='Fetch a UTC day for the current visible markets.';
++  }
++
++  function traderDiagnostics(rows) {
++    const settled=rows.filter(r=>r.resolved && r.pnl!=null).sort((a,b)=>a.endSec-b.endSec);
++    const wins=settled.filter(r=>r.pnl>0).reduce((n,r)=>n+r.pnl,0);
++    const losses=-settled.filter(r=>r.pnl<0).reduce((n,r)=>n+r.pnl,0);
++    const trades=rows.flatMap(r=>r.trades || []);
++    return {
++      count:settled.length, excluded:rows.filter(r=>r.excluded).length,
++      pnl:settled.reduce((n,r)=>n+r.pnl,0),
++      gross:settled.reduce((n,r)=>n+(r.grossSettlementPnl || 0),0),
++      fees:settled.reduce((n,r)=>n+(r.feeTotal || 0),0),
++      drawdown:calculateMaxDrawdownFromPoints(buildCumulativeSeries(settled,getEquityChartStartSec())),
++      profitFactor:losses>0?wins/losses:wins>0?Infinity:null,
++      makers:trades.filter(t=>t._isTaker===false).length,
++      takers:trades.filter(t=>t._isTaker===true).length,
++      unknown:trades.filter(t=>t._isTaker==null).length
++    };
++  }
++
++  function renderDiagnostics() {
++    const container=document.getElementById('diagnosticMetrics');
++    if (!container) return;
++    const rows=getVisibleRows(), d=traderDiagnostics(rows);
++    const cards=[
++      ['Max drawdown',d.count?fmtMoney(d.drawdown):'—','Peak-to-trough settled P&L; starts at $0'],
++      ['Profit factor',d.count?(d.profitFactor===Infinity?'∞':d.profitFactor==null?'—':d.profitFactor.toFixed(2)):'—','Winning P&L ÷ absolute losing P&L'],
++      ['Gross P&L',d.count?fmtMoney(d.gross,true):'—','Before modeled fees; included settled rounds'],
++      ['Modeled fees',d.count?fmtMoney(d.fees):'—','Per-fill estimate; already deducted from P&L'],
++      ['Maker / taker',`${d.makers} / ${d.takers}`,`${d.unknown} unknown roles; conservative taker estimate`],
++      ['Excluded rounds',String(d.excluded),'Excluded from curve, totals and profit factor']
++    ];
++    container.innerHTML=cards.map(([label,value,note])=>`<div class="metric"><div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-note">${note}</div></div>`).join('');
++    document.getElementById('diagnosticSummary').textContent=state.rows.length?`${d.count} included · ${d.excluded} excluded`:'Risk, fees, coverage and rebates';
++    const notes=[...state.qualityWarnings];
++    if (state.truncatedTrades) notes.push('Trade history hit a limit: equity withheld until a complete shorter range is loaded.');
++    if (state.proxyWallet && !state.ledgerComplete) notes.push('Inventory events are unverified; model results remain provisional.');
++    if (state.rows.length) notes.push(`${state.demo?'Demo':'Loaded'}: ${loadedRangeLabel()}. Filters apply to the chart, summary and market export.`);
++    notes.push('This is settled BTC 5m trading P&L from zero, not wallet balance or return on capital. Deposits, withdrawals, open-position marks and external token transfers are not reconstructed. Fee schedules and public maker/taker matching are model inputs, not transaction receipt proof.');
++    document.getElementById('coverageNote').textContent=notes.join(' ');
++    const credits=state.ledgerEvents.filter(e=>['MAKER_REBATE','TAKER_REBATE'].includes(e.type));
++    const sum=credits.reduce((n,e)=>n+Math.max(0,nullableNumber(e.usdcSize) || 0),0);
++    document.getElementById('rebatePayouts').textContent=state.demo?'Demo — no payout evidence':!state.proxyWallet?'No wallet loaded':state.ledgerComplete?`${fmtMoney(sum)} observed wallet-wide rebate payouts · ${credits.length} records`:'Rebate payout coverage incomplete';
++    document.getElementById('rebateLoad').disabled=!state.proxyWallet || state.demo || state.loading || state.rebateLoading;
++  }
++
++  async function loadDailyRebates() {
++    const generation=state.generation, button=document.getElementById('rebateLoad'), output=document.getElementById('rebateResult');
++    const day=document.getElementById('rebateDate').value;
++    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !state.proxyWallet || state.demo) return;
++    const request=++state.rebateRequest; state.rebateLoading=true;
++    button.disabled=true; output.textContent='Loading reported rebates…';
++    try {
++      const url=new URL(`${CLOB_API}/rebates/current`);
++      url.searchParams.set('date',day); url.searchParams.set('maker_address',state.proxyWallet);
++      const payload=await fetchJson(url.toString(),{label:'Daily maker rebates'});
++      if (generation!==state.generation || request!==state.rebateRequest) return;
++      if (!Array.isArray(payload)) throw new Error('Unexpected rebate response');
++      const eligible=payload.filter(r=>String(r.maker_address || '').toLowerCase()===state.proxyWallet.toLowerCase() && r.date===day);
++      if (eligible.some(r=>nullableNumber(r.rebated_fees_usdc)==null || Number(r.rebated_fees_usdc)<0)) throw new Error('Invalid rebate amount returned');
++      const ids=new Set(getVisibleRows().map(r=>r.conditionId));
++      const matched=eligible.filter(r=>ids.has(String(r.condition_id || '').toLowerCase()));
++      const total=matched.reduce((n,r)=>n+Number(r.rebated_fees_usdc),0);
++      output.textContent=`${fmtMoney(total)} reported for visible BTC markets on ${day} UTC · ${matched.length} records. Daily accrual, not proof of payment; excluded from the equity curve and wallet payout total.`;
++      state.dailyRebateRows=matched;
++    } catch(error) { if (generation===state.generation && request===state.rebateRequest) output.textContent=`Rebates unavailable: ${error.message}`; }
++    finally { if (generation===state.generation && request===state.rebateRequest) {state.rebateLoading=false;button.disabled=false;} }
++  }
++
+   function handleAutoRefreshChange() {
+     setLiveUi();
+     if (els.autoRefresh.checked && state.proxyWallet && !state.demo) {
+@@ -2656,14 +2877,20 @@
+   }
+ 
+   els.load.addEventListener('click', () => loadReport());
++  document.getElementById('rebateDate').value=new Date().toISOString().slice(0,10);
++  document.getElementById('rebateDate').addEventListener('change',()=>{invalidateRebates();renderDiagnostics();});
++  document.getElementById('rebateLoad').addEventListener('click',loadDailyRebates);
++  els.balanceChart.addEventListener('pointerdown',event=>handleChartPointer(event,'balance'));
+   els.wallet.addEventListener('click', connectWallet);
+   els.demo.addEventListener('click', showDemo);
+   els.export.addEventListener('click', exportCsv);
+-  els.resolvedOnly.addEventListener('change', () => { renderRows(); renderMetrics(); });
+-  els.bothOnly.addEventListener('change', renderRows);
++  els.resolvedOnly.addEventListener('change', () => {invalidateRebates();render();});
++  els.bothOnly.addEventListener('change', () => {invalidateRebates();render();});
+   els.sort.addEventListener('change', renderRows);
+   els.audit.addEventListener('click', async () => {
++    const generation=state.generation;
+     await verifyMarketPnls(buildGroups(state.allTrades, state.historySinceSec), { force: true, silent: false });
++    if (generation!==state.generation) return;
+     refreshRowsFromCache();
+     render();
+     const rows = state.rows.filter(row => row.resolved && row.pnl != null);
+@@ -2689,10 +2916,13 @@
+     renderChart();
+   });
+   els.lookback.addEventListener('change', () => {
++    invalidateRebates();
+     storageSet('pm-btc5m-lookback', els.lookback.value);
+     renderMetrics();
+     renderRows();
+     renderChart();
++    renderDiagnostics();
++    document.getElementById('rebateResult').textContent='Fetch a UTC day for the current visible markets.';
+   });
+   els.start.addEventListener('change', () => {
+     storageSet('pm-btc5m-start', els.start.value || '');
+@@ -2746,6 +2976,7 @@
+   try { state.calculationSelfTest = runCalculationSelfTest(); }
+   catch (error) { state.calculationSelfTest = { ok: false, message: error.message }; console.error(error); setStatus(error.message, 'error'); }
+   setLiveUi();
++  renderDiagnostics();
+   renderCurrentRound();
+   renderChart();
+ 

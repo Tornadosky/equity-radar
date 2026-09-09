@@ -1,0 +1,2284 @@
+{
+  "meta": {
+    "synthetic": true,
+    "name": "Equity Radar deterministic contract fixture",
+    "version": 1,
+    "now": 1788955200,
+    "nowIso": "2026-09-09T12:00:00Z",
+    "recommendedStart": 1788937200,
+    "recommendedStartIso": "2026-09-09T07:00:00Z",
+    "wallet": "0x1111111111111111111111111111111111111111",
+    "sourcesVerifiedDate": "2026-09-09",
+    "sources": [
+      "https://docs.polymarket.com/api-reference/core/get-user-activity",
+      "https://docs.polymarket.com/api-reference/core/get-trades-for-a-user-or-markets",
+      "https://docs.polymarket.com/api-reference/core/get-current-positions-for-a-user",
+      "https://docs.polymarket.com/api-reference/core/get-closed-positions-for-a-user",
+      "https://docs.polymarket.com/api-reference/core/get-positions-for-a-market",
+      "https://docs.polymarket.com/api-reference/markets/get-clob-market-info",
+      "https://docs.polymarket.com/api-reference/markets/list-markets",
+      "https://docs.polymarket.com/api-reference/rebates/get-current-rebated-fees-for-a-maker"
+    ],
+    "clockRule": "Freeze browser Date.now to meta.now*1000 OR rebase every epoch/ISO/slug consistently by a multiple of 300 seconds.",
+    "accountRule": "Serve only for this synthetic address. Never silently map a real account to synthetic responses.",
+    "feeAssumption": "Preserve uploaded HTML: fees = round5(size*0.07*price*(1-price)); maker=0; BUY fee additional collateral; SELL fee deducted."
+  },
+  "rounds": [
+    {
+      "id": "R1",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "start": 1788940800,
+      "end": 1788941100,
+      "slug": "btc-updown-5m-1788940800",
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "tokens": [
+        "100010",
+        "100011"
+      ],
+      "winner": "Up",
+      "description": "Winning Up position; two identical legitimate fills in one transaction; unclaimed payout"
+    },
+    {
+      "id": "R2",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "start": 1788942600,
+      "end": 1788942900,
+      "slug": "btc-updown-5m-1788942600",
+      "title": "Bitcoin Up or Down \u2014 Fixture 02",
+      "tokens": [
+        "100020",
+        "100021"
+      ],
+      "winner": "Down",
+      "description": "Losing maker Up position; Down settles at 1"
+    },
+    {
+      "id": "R3",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "start": 1788944400,
+      "end": 1788944700,
+      "slug": "btc-updown-5m-1788944400",
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "tokens": [
+        "100030",
+        "100031"
+      ],
+      "winner": "Up",
+      "description": "Bought both sides; Up wins; both outcomes subsequently redeemed"
+    },
+    {
+      "id": "R4",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "start": 1788946200,
+      "end": 1788946500,
+      "slug": "btc-updown-5m-1788946200",
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "tokens": [
+        "100040",
+        "100041"
+      ],
+      "winner": "Down",
+      "description": "Down buy then partial sale; Down wins; remaining payout unclaimed"
+    },
+    {
+      "id": "R5",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "start": 1788948000,
+      "end": 1788948300,
+      "slug": "btc-updown-5m-1788948000",
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "tokens": [
+        "100050",
+        "100051"
+      ],
+      "winner": "Down",
+      "description": "Fully sold Up position; market later resolves Down"
+    },
+    {
+      "id": "R6",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "start": 1788949800,
+      "end": 1788950100,
+      "slug": "btc-updown-5m-1788949800",
+      "title": "Bitcoin Up or Down \u2014 Fixture 06",
+      "tokens": [
+        "100060",
+        "100061"
+      ],
+      "winner": null,
+      "description": "Unresolved market with extreme 0.999/0.001 quotes after scheduled end"
+    },
+    {
+      "id": "R7",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "start": 1788951600,
+      "end": 1788951900,
+      "slug": "btc-updown-5m-1788951600",
+      "title": "Bitcoin Up or Down \u2014 Fixture 07",
+      "tokens": [
+        "100070",
+        "100071"
+      ],
+      "winner": "Up",
+      "description": "Missing opening inventory: sell-only history must not manufacture profit"
+    },
+    {
+      "id": "R8",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "start": 1788953400,
+      "end": 1788953700,
+      "slug": "btc-updown-5m-1788953400",
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "tokens": [
+        "100080",
+        "100081"
+      ],
+      "winner": "Up",
+      "description": "SPLIT and MERGE change payout inventory; maker and taker rebate activity is separate"
+    }
+  ],
+  "responses": [
+    {
+      "method": "GET",
+      "host": "gamma-api.polymarket.com",
+      "path": "/public-profile",
+      "query": {
+        "address": "0x1111111111111111111111111111111111111111"
+      },
+      "responseRef": "profile"
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/activity",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111"
+      },
+      "responseRef": "activity",
+      "filters": [
+        "type: comma-separated or repeated",
+        "start/end: inclusive epoch seconds",
+        "limit/offset: after filtering",
+        "sortDirection"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/trades",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111",
+        "takerOnly": "true"
+      },
+      "responseRef": "takerTrades",
+      "filters": [
+        "limit/offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/trades",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111",
+        "takerOnly": "false"
+      },
+      "responseRef": "trades",
+      "filters": [
+        "limit/offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/positions",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111"
+      },
+      "responseRef": "positions",
+      "filters": [
+        "redeemable=true",
+        "market",
+        "limit/offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/closed-positions",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111"
+      },
+      "responseRef": "closedPositions",
+      "filters": [
+        "market",
+        "limit/offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "data-api.polymarket.com",
+      "path": "/v1/market-positions",
+      "query": {
+        "user": "0x1111111111111111111111111111111111111111"
+      },
+      "responseRef": "marketPositions[query.market]",
+      "filters": [
+        "limit/offset per token"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "gamma-api.polymarket.com",
+      "path": "/markets",
+      "responseRef": "markets",
+      "filters": [
+        "condition_ids CSV",
+        "closed boolean"
+      ]
+    },
+    {
+      "method": "GET",
+      "host": "gamma-api.polymarket.com",
+      "path": "/markets/slug/:slug",
+      "responseRef": "markets.find(slug)"
+    },
+    {
+      "method": "GET",
+      "host": "gamma-api.polymarket.com",
+      "path": "/events/slug/:slug",
+      "responseRef": "{markets:[markets.find(slug)]}"
+    },
+    {
+      "method": "GET",
+      "host": "clob.polymarket.com",
+      "path": "/clob-markets/:conditionId",
+      "responseRef": "clobMarkets[conditionId]"
+    },
+    {
+      "method": "GET",
+      "host": "clob.polymarket.com",
+      "path": "/rebates/current",
+      "responseRef": "rebates"
+    }
+  ],
+  "profile": {
+    "proxyWallet": "0x1111111111111111111111111111111111111111",
+    "name": "Synthetic QA Wallet",
+    "pseudonym": "fixture-only"
+  },
+  "activity": [
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788955180,
+      "conditionId": "",
+      "type": "REWARD",
+      "size": 0,
+      "usdcSize": 0.75,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000078",
+      "price": 0,
+      "asset": "",
+      "side": "",
+      "outcomeIndex": 999,
+      "title": "",
+      "slug": "",
+      "icon": "",
+      "eventSlug": "",
+      "outcome": "",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788954000,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "type": "MAKER_REBATE",
+      "size": 0,
+      "usdcSize": 1.25,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000076",
+      "price": 0,
+      "asset": "",
+      "side": "",
+      "outcomeIndex": 999,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953520,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "type": "MERGE",
+      "size": 5,
+      "usdcSize": 5,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000075",
+      "price": 1.0,
+      "asset": "",
+      "side": "",
+      "outcomeIndex": 999,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "type": "TRADE",
+      "size": 8,
+      "usdcSize": 4.0,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000071",
+      "price": 0.5,
+      "asset": "100081",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953430,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "type": "TRADE",
+      "size": 12,
+      "usdcSize": 4.8,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000070",
+      "price": 0.4,
+      "asset": "100080",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953410,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "type": "SPLIT",
+      "size": 2,
+      "usdcSize": 2,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000074",
+      "price": 1.0,
+      "asset": "",
+      "side": "",
+      "outcomeIndex": 999,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788951630,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "type": "TRADE",
+      "size": 10,
+      "usdcSize": 7.0,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006f",
+      "price": 0.7,
+      "asset": "100070",
+      "side": "SELL",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 07",
+      "slug": "btc-updown-5m-1788951600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788951600",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788949830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "type": "TRADE",
+      "size": 20,
+      "usdcSize": 12.0,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006e",
+      "price": 0.6,
+      "asset": "100060",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 06",
+      "slug": "btc-updown-5m-1788949800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788949800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788948100,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "type": "TRADE",
+      "size": 30,
+      "usdcSize": 13.5,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006d",
+      "price": 0.45,
+      "asset": "100050",
+      "side": "SELL",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788948030,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "type": "TRADE",
+      "size": 30,
+      "usdcSize": 6.0,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006c",
+      "price": 0.2,
+      "asset": "100050",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946900,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "type": "TAKER_REBATE",
+      "size": 0,
+      "usdcSize": 0.5,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000077",
+      "price": 0,
+      "asset": "",
+      "side": "",
+      "outcomeIndex": 999,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946290,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "type": "TRADE",
+      "size": 20,
+      "usdcSize": 10.0,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006b",
+      "price": 0.5,
+      "asset": "100041",
+      "side": "SELL",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946230,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "type": "TRADE",
+      "size": 60,
+      "usdcSize": 15.0,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006a",
+      "price": 0.25,
+      "asset": "100041",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944800,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "type": "REDEEM",
+      "size": 50,
+      "usdcSize": 50,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000001389",
+      "price": 1.0,
+      "asset": "100030",
+      "side": "",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944800,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "type": "REDEEM",
+      "size": 40,
+      "usdcSize": 0,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000001389",
+      "price": 0.0,
+      "asset": "100031",
+      "side": "",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "type": "TRADE",
+      "size": 40,
+      "usdcSize": 24.0,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000069",
+      "price": 0.6,
+      "asset": "100031",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944430,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "type": "TRADE",
+      "size": 50,
+      "usdcSize": 15.0,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000068",
+      "price": 0.3,
+      "asset": "100030",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788942630,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "type": "TRADE",
+      "size": 80,
+      "usdcSize": 48.0,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000067",
+      "price": 0.6,
+      "asset": "100020",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 02",
+      "slug": "btc-updown-5m-1788942600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788942600",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "type": "TRADE",
+      "size": 50,
+      "usdcSize": 20.0,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "type": "TRADE",
+      "size": 50,
+      "usdcSize": 20.0,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    }
+  ],
+  "trades": [
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "size": 8,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000071",
+      "price": 0.5,
+      "asset": "100081",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953430,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "size": 12,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000070",
+      "price": 0.4,
+      "asset": "100080",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788951630,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "size": 10,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006f",
+      "price": 0.7,
+      "asset": "100070",
+      "side": "SELL",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 07",
+      "slug": "btc-updown-5m-1788951600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788951600",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788949830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "size": 20,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006e",
+      "price": 0.6,
+      "asset": "100060",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 06",
+      "slug": "btc-updown-5m-1788949800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788949800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788948100,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "size": 30,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006d",
+      "price": 0.45,
+      "asset": "100050",
+      "side": "SELL",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788948030,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "size": 30,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006c",
+      "price": 0.2,
+      "asset": "100050",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946290,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "size": 20,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006b",
+      "price": 0.5,
+      "asset": "100041",
+      "side": "SELL",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946230,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "size": 60,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006a",
+      "price": 0.25,
+      "asset": "100041",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "size": 40,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000069",
+      "price": 0.6,
+      "asset": "100031",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944430,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "size": 50,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000068",
+      "price": 0.3,
+      "asset": "100030",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788942630,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "size": 80,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000067",
+      "price": 0.6,
+      "asset": "100020",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 02",
+      "slug": "btc-updown-5m-1788942600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788942600",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "size": 50,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "size": 50,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    }
+  ],
+  "takerTrades": [
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788953460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "size": 8,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000071",
+      "price": 0.5,
+      "asset": "100081",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788949830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "size": 20,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006e",
+      "price": 0.6,
+      "asset": "100060",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 06",
+      "slug": "btc-updown-5m-1788949800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788949800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788948100,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "size": 30,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006d",
+      "price": 0.45,
+      "asset": "100050",
+      "side": "SELL",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946290,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "size": 20,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006b",
+      "price": 0.5,
+      "asset": "100041",
+      "side": "SELL",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788946230,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "size": 60,
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000006a",
+      "price": 0.25,
+      "asset": "100041",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788944460,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "size": 40,
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000069",
+      "price": 0.6,
+      "asset": "100031",
+      "side": "BUY",
+      "outcomeIndex": 1,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Down",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "size": 50,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "timestamp": 1788940830,
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "size": 50,
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000003e9",
+      "price": 0.4,
+      "asset": "100010",
+      "side": "BUY",
+      "outcomeIndex": 0,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "name": "Synthetic QA Wallet",
+      "pseudonym": "fixture-only",
+      "bio": "Synthetic testing data",
+      "profileImage": "",
+      "profileImageOptimized": ""
+    }
+  ],
+  "positions": [
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100080",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "avgPrice": 0.41428571428571426,
+      "totalBought": 12,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100081",
+      "endDate": "2026-09-09T11:35:00Z",
+      "size": 9.0,
+      "initialValue": 3.72857143,
+      "currentValue": 9.0,
+      "cashPnl": 5.27142857,
+      "realizedPnl": 0.42857143,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 1,
+      "redeemable": true,
+      "mergeable": true,
+      "negativeRisk": false
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100081",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "avgPrice": 0.5,
+      "totalBought": 8,
+      "title": "Bitcoin Up or Down \u2014 Fixture 08",
+      "slug": "btc-updown-5m-1788953400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788953400",
+      "outcome": "Down",
+      "outcomeIndex": 1,
+      "oppositeOutcome": "Up",
+      "oppositeAsset": "100080",
+      "endDate": "2026-09-09T11:35:00Z",
+      "size": 5.0,
+      "initialValue": 2.5,
+      "currentValue": 0.0,
+      "cashPnl": -2.57,
+      "realizedPnl": -0.07,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 0,
+      "redeemable": true,
+      "mergeable": true,
+      "negativeRisk": false
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100060",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "avgPrice": 0.6,
+      "totalBought": 20,
+      "title": "Bitcoin Up or Down \u2014 Fixture 06",
+      "slug": "btc-updown-5m-1788949800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788949800",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100061",
+      "endDate": "2026-09-09T10:35:00Z",
+      "size": 20.0,
+      "initialValue": 12.0,
+      "currentValue": 19.98,
+      "cashPnl": 7.644,
+      "realizedPnl": 0,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 0.999,
+      "redeemable": false,
+      "mergeable": false,
+      "negativeRisk": false
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100041",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "avgPrice": 0.25,
+      "totalBought": 60,
+      "title": "Bitcoin Up or Down \u2014 Fixture 04",
+      "slug": "btc-updown-5m-1788946200",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788946200",
+      "outcome": "Down",
+      "outcomeIndex": 1,
+      "oppositeOutcome": "Up",
+      "oppositeAsset": "100040",
+      "endDate": "2026-09-09T09:35:00Z",
+      "size": 40.0,
+      "initialValue": 10.0,
+      "currentValue": 40.0,
+      "cashPnl": 29.475,
+      "realizedPnl": 4.3875,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 1,
+      "redeemable": true,
+      "mergeable": false,
+      "negativeRisk": false
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100020",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "avgPrice": 0.6,
+      "totalBought": 80,
+      "title": "Bitcoin Up or Down \u2014 Fixture 02",
+      "slug": "btc-updown-5m-1788942600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788942600",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100021",
+      "endDate": "2026-09-09T08:35:00Z",
+      "size": 80.0,
+      "initialValue": 48.0,
+      "currentValue": 0.0,
+      "cashPnl": -48,
+      "realizedPnl": 0,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 0,
+      "redeemable": true,
+      "mergeable": false,
+      "negativeRisk": false
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100010",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "avgPrice": 0.4,
+      "totalBought": 100,
+      "title": "Bitcoin Up or Down \u2014 Fixture 01",
+      "slug": "btc-updown-5m-1788940800",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788940800",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100011",
+      "endDate": "2026-09-09T08:05:00Z",
+      "size": 100.0,
+      "initialValue": 40.0,
+      "currentValue": 100.0,
+      "cashPnl": 58.32,
+      "realizedPnl": 0,
+      "percentPnl": 0,
+      "percentRealizedPnl": 0,
+      "curPrice": 1,
+      "redeemable": true,
+      "mergeable": false,
+      "negativeRisk": false
+    }
+  ],
+  "closedPositions": [
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100070",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "avgPrice": 0.5,
+      "totalBought": 10,
+      "title": "Bitcoin Up or Down \u2014 Fixture 07",
+      "slug": "btc-updown-5m-1788951600",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788951600",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100071",
+      "endDate": "2026-09-09T11:05:00Z",
+      "realizedPnl": 2.0,
+      "curPrice": 1,
+      "timestamp": 1788952000
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100050",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "avgPrice": 0.2,
+      "totalBought": 30,
+      "title": "Bitcoin Up or Down \u2014 Fixture 05",
+      "slug": "btc-updown-5m-1788948000",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788948000",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100051",
+      "endDate": "2026-09-09T10:05:00Z",
+      "realizedPnl": 6.98025,
+      "curPrice": 0,
+      "timestamp": 1788948400
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100030",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "avgPrice": 0.3,
+      "totalBought": 50,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Up",
+      "outcomeIndex": 0,
+      "oppositeOutcome": "Down",
+      "oppositeAsset": "100031",
+      "endDate": "2026-09-09T09:05:00Z",
+      "realizedPnl": 35,
+      "curPrice": 1,
+      "timestamp": 1788944800
+    },
+    {
+      "proxyWallet": "0x1111111111111111111111111111111111111111",
+      "asset": "100031",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "avgPrice": 0.6,
+      "totalBought": 40,
+      "title": "Bitcoin Up or Down \u2014 Fixture 03",
+      "slug": "btc-updown-5m-1788944400",
+      "icon": "",
+      "eventSlug": "btc-updown-5m-1788944400",
+      "outcome": "Down",
+      "outcomeIndex": 1,
+      "oppositeOutcome": "Up",
+      "oppositeAsset": "100030",
+      "endDate": "2026-09-09T09:05:00Z",
+      "realizedPnl": -24.672,
+      "curPrice": 0,
+      "timestamp": 1788944800
+    }
+  ],
+  "markets": [
+    {
+      "id": "900001",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "slug": "btc-updown-5m-1788940800",
+      "question": "Bitcoin Up or Down \u2014 Fixture 01",
+      "startDate": "2026-09-09T08:00:00Z",
+      "endDate": "2026-09-09T08:05:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"1\", \"0\"]",
+      "clobTokenIds": "[\"100010\", \"100011\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900002",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "slug": "btc-updown-5m-1788942600",
+      "question": "Bitcoin Up or Down \u2014 Fixture 02",
+      "startDate": "2026-09-09T08:30:00Z",
+      "endDate": "2026-09-09T08:35:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"0\", \"1\"]",
+      "clobTokenIds": "[\"100020\", \"100021\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900003",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "slug": "btc-updown-5m-1788944400",
+      "question": "Bitcoin Up or Down \u2014 Fixture 03",
+      "startDate": "2026-09-09T09:00:00Z",
+      "endDate": "2026-09-09T09:05:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"1\", \"0\"]",
+      "clobTokenIds": "[\"100030\", \"100031\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900004",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "slug": "btc-updown-5m-1788946200",
+      "question": "Bitcoin Up or Down \u2014 Fixture 04",
+      "startDate": "2026-09-09T09:30:00Z",
+      "endDate": "2026-09-09T09:35:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"0\", \"1\"]",
+      "clobTokenIds": "[\"100040\", \"100041\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900005",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "slug": "btc-updown-5m-1788948000",
+      "question": "Bitcoin Up or Down \u2014 Fixture 05",
+      "startDate": "2026-09-09T10:00:00Z",
+      "endDate": "2026-09-09T10:05:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"0\", \"1\"]",
+      "clobTokenIds": "[\"100050\", \"100051\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900006",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "slug": "btc-updown-5m-1788949800",
+      "question": "Bitcoin Up or Down \u2014 Fixture 06",
+      "startDate": "2026-09-09T10:30:00Z",
+      "endDate": "2026-09-09T10:35:00Z",
+      "active": true,
+      "closed": false,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"0.999\", \"0.001\"]",
+      "clobTokenIds": "[\"100060\", \"100061\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "proposed"
+    },
+    {
+      "id": "900007",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "slug": "btc-updown-5m-1788951600",
+      "question": "Bitcoin Up or Down \u2014 Fixture 07",
+      "startDate": "2026-09-09T11:00:00Z",
+      "endDate": "2026-09-09T11:05:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"1\", \"0\"]",
+      "clobTokenIds": "[\"100070\", \"100071\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    },
+    {
+      "id": "900008",
+      "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "slug": "btc-updown-5m-1788953400",
+      "question": "Bitcoin Up or Down \u2014 Fixture 08",
+      "startDate": "2026-09-09T11:30:00Z",
+      "endDate": "2026-09-09T11:35:00Z",
+      "active": false,
+      "closed": true,
+      "archived": false,
+      "outcomes": "[\"Up\", \"Down\"]",
+      "outcomePrices": "[\"1\", \"0\"]",
+      "clobTokenIds": "[\"100080\", \"100081\"]",
+      "feesEnabled": true,
+      "enableOrderBook": true,
+      "acceptingOrders": false,
+      "umaResolutionStatus": "resolved"
+    }
+  ],
+  "clobMarkets": {
+    "0x0000000000000000000000000000000000000000000000000000000000000001": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100010",
+          "o": "Up"
+        },
+        {
+          "t": "100011",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000002": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100020",
+          "o": "Up"
+        },
+        {
+          "t": "100021",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000003": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100030",
+          "o": "Up"
+        },
+        {
+          "t": "100031",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000004": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100040",
+          "o": "Up"
+        },
+        {
+          "t": "100041",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000005": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100050",
+          "o": "Up"
+        },
+        {
+          "t": "100051",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000006": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100060",
+          "o": "Up"
+        },
+        {
+          "t": "100061",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000007": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100070",
+          "o": "Up"
+        },
+        {
+          "t": "100071",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    },
+    "0x0000000000000000000000000000000000000000000000000000000000000008": {
+      "gst": null,
+      "r": {},
+      "t": [
+        {
+          "t": "100080",
+          "o": "Up"
+        },
+        {
+          "t": "100081",
+          "o": "Down"
+        }
+      ],
+      "mos": 5,
+      "mts": 0.001,
+      "mbf": 0,
+      "tbf": 0,
+      "rfqe": false,
+      "ibce": true,
+      "fd": {
+        "r": 0.07,
+        "e": 1,
+        "to": true
+      },
+      "oas": 0
+    }
+  },
+  "marketPositions": {
+    "0x0000000000000000000000000000000000000000000000000000000000000001": [
+      {
+        "token": "100010",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100010",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+            "avgPrice": 0.4,
+            "size": 100.0,
+            "currPrice": 1,
+            "currentValue": 100.0,
+            "cashPnl": 58.32,
+            "totalBought": 100,
+            "realizedPnl": 0,
+            "totalPnl": 58.32,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000002": [
+      {
+        "token": "100020",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100020",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+            "avgPrice": 0.6,
+            "size": 80.0,
+            "currPrice": 0,
+            "currentValue": 0.0,
+            "cashPnl": -48,
+            "totalBought": 80,
+            "realizedPnl": 0,
+            "totalPnl": -48,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000003": [
+      {
+        "token": "100030",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100030",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "avgPrice": 0.3,
+            "size": 0,
+            "currPrice": 1,
+            "currentValue": 0.0,
+            "cashPnl": 0,
+            "totalBought": 50,
+            "realizedPnl": 35,
+            "totalPnl": 35,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      },
+      {
+        "token": "100031",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100031",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "avgPrice": 0.6,
+            "size": 0,
+            "currPrice": 0,
+            "currentValue": 0.0,
+            "cashPnl": 0,
+            "totalBought": 40,
+            "realizedPnl": -24.672,
+            "totalPnl": -24.672,
+            "outcome": "Down",
+            "outcomeIndex": 1
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000004": [
+      {
+        "token": "100041",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100041",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+            "avgPrice": 0.25,
+            "size": 40.0,
+            "currPrice": 1,
+            "currentValue": 40.0,
+            "cashPnl": 29.475,
+            "totalBought": 60,
+            "realizedPnl": 4.3875,
+            "totalPnl": 33.8625,
+            "outcome": "Down",
+            "outcomeIndex": 1
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000005": [
+      {
+        "token": "100050",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100050",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+            "avgPrice": 0.2,
+            "size": 0,
+            "currPrice": 0,
+            "currentValue": 0.0,
+            "cashPnl": 0,
+            "totalBought": 30,
+            "realizedPnl": 6.98025,
+            "totalPnl": 6.98025,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000006": [
+      {
+        "token": "100060",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100060",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+            "avgPrice": 0.6,
+            "size": 20.0,
+            "currPrice": 0.999,
+            "currentValue": 19.98,
+            "cashPnl": 7.644,
+            "totalBought": 20,
+            "realizedPnl": 0,
+            "totalPnl": 7.644,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000007": [
+      {
+        "token": "100070",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100070",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+            "avgPrice": 0.5,
+            "size": 0,
+            "currPrice": 1,
+            "currentValue": 0.0,
+            "cashPnl": 0,
+            "totalBought": 10,
+            "realizedPnl": 2.0,
+            "totalPnl": 2.0,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      }
+    ],
+    "0x0000000000000000000000000000000000000000000000000000000000000008": [
+      {
+        "token": "100080",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100080",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "avgPrice": 0.41428571428571426,
+            "size": 9.0,
+            "currPrice": 1,
+            "currentValue": 9.0,
+            "cashPnl": 5.27142857,
+            "totalBought": 12,
+            "realizedPnl": 0.42857143,
+            "totalPnl": 5.7,
+            "outcome": "Up",
+            "outcomeIndex": 0
+          }
+        ]
+      },
+      {
+        "token": "100081",
+        "positions": [
+          {
+            "proxyWallet": "0x1111111111111111111111111111111111111111",
+            "name": "Synthetic QA Wallet",
+            "profileImage": "",
+            "verified": false,
+            "asset": "100081",
+            "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "avgPrice": 0.5,
+            "size": 5.0,
+            "currPrice": 0,
+            "currentValue": 0.0,
+            "cashPnl": -2.57,
+            "totalBought": 8,
+            "realizedPnl": -0.07,
+            "totalPnl": -2.64,
+            "outcome": "Down",
+            "outcomeIndex": 1
+          }
+        ]
+      }
+    ]
+  },
+  "rebates": [
+    {
+      "date": "2026-09-09",
+      "condition_id": "0x0000000000000000000000000000000000000000000000000000000000000008",
+      "asset_address": "0x2222222222222222222222222222222222222222",
+      "maker_address": "0x1111111111111111111111111111111111111111",
+      "rebated_fees_usdc": "1.250000"
+    }
+  ],
+  "expected": {
+    "rounds": [
+      {
+        "id": "R1",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "winner": "Up",
+        "buyNotional": 40.0,
+        "sellNotional": 0.0,
+        "fee": 1.68,
+        "tradeNetShares": {
+          "Up": 100.0,
+          "Down": 0.0
+        },
+        "legacyTradeOnlyPayout": 100.0,
+        "legacyTradeOnlyPnl": 58.32,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 100.0,
+          "Down": 0.0
+        },
+        "correctLifecyclePayout": 100.0,
+        "correctPnl": 58.32,
+        "eligibleWhenLifecycleUnsupported": true,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": null
+      },
+      {
+        "id": "R2",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+        "winner": "Down",
+        "buyNotional": 48.0,
+        "sellNotional": 0.0,
+        "fee": 0.0,
+        "tradeNetShares": {
+          "Up": 80.0,
+          "Down": 0.0
+        },
+        "legacyTradeOnlyPayout": 0.0,
+        "legacyTradeOnlyPnl": -48.0,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 80.0,
+          "Down": 0.0
+        },
+        "correctLifecyclePayout": 0.0,
+        "correctPnl": -48.0,
+        "eligibleWhenLifecycleUnsupported": true,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": null
+      },
+      {
+        "id": "R3",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+        "winner": "Up",
+        "buyNotional": 39.0,
+        "sellNotional": 0.0,
+        "fee": 0.672,
+        "tradeNetShares": {
+          "Up": 50.0,
+          "Down": 40.0
+        },
+        "legacyTradeOnlyPayout": 50.0,
+        "legacyTradeOnlyPnl": 10.328,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 50.0,
+          "Down": 40.0
+        },
+        "correctLifecyclePayout": 50.0,
+        "correctPnl": 10.328,
+        "eligibleWhenLifecycleUnsupported": true,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": null
+      },
+      {
+        "id": "R4",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+        "winner": "Down",
+        "buyNotional": 15.0,
+        "sellNotional": 10.0,
+        "fee": 1.1375,
+        "tradeNetShares": {
+          "Up": 0.0,
+          "Down": 40.0
+        },
+        "legacyTradeOnlyPayout": 40.0,
+        "legacyTradeOnlyPnl": 33.8625,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 0.0,
+          "Down": 40.0
+        },
+        "correctLifecyclePayout": 40.0,
+        "correctPnl": 33.8625,
+        "eligibleWhenLifecycleUnsupported": true,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": null
+      },
+      {
+        "id": "R5",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+        "winner": "Down",
+        "buyNotional": 6.0,
+        "sellNotional": 13.5,
+        "fee": 0.51975,
+        "tradeNetShares": {
+          "Up": 0.0,
+          "Down": 0.0
+        },
+        "legacyTradeOnlyPayout": 0.0,
+        "legacyTradeOnlyPnl": 6.98025,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 0.0,
+          "Down": 0.0
+        },
+        "correctLifecyclePayout": 0.0,
+        "correctPnl": 6.98025,
+        "eligibleWhenLifecycleUnsupported": true,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": null
+      },
+      {
+        "id": "R6",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+        "winner": null,
+        "buyNotional": 12.0,
+        "sellNotional": 0.0,
+        "fee": 0.336,
+        "tradeNetShares": {
+          "Up": 20.0,
+          "Down": 0.0
+        },
+        "legacyTradeOnlyPayout": null,
+        "legacyTradeOnlyPnl": null,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": 20.0,
+          "Down": 0.0
+        },
+        "correctLifecyclePayout": null,
+        "correctPnl": null,
+        "eligibleWhenLifecycleUnsupported": false,
+        "eligibleWhenLifecycleSupported": false,
+        "exclusion": "No confirmed resolution"
+      },
+      {
+        "id": "R7",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+        "winner": "Up",
+        "buyNotional": 0.0,
+        "sellNotional": 7.0,
+        "fee": 0.0,
+        "tradeNetShares": {
+          "Up": -10.0,
+          "Down": 0.0
+        },
+        "legacyTradeOnlyPayout": 0.0,
+        "legacyTradeOnlyPnl": 7.0,
+        "lifecycleCash": 0.0,
+        "correctLifecycleNetShares": {
+          "Up": -10.0,
+          "Down": 0.0
+        },
+        "correctLifecyclePayout": 0.0,
+        "correctPnl": null,
+        "eligibleWhenLifecycleUnsupported": false,
+        "eligibleWhenLifecycleSupported": false,
+        "exclusion": "Missing opening inventory/cost basis"
+      },
+      {
+        "id": "R8",
+        "conditionId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+        "winner": "Up",
+        "buyNotional": 8.8,
+        "sellNotional": 0.0,
+        "fee": 0.14,
+        "tradeNetShares": {
+          "Up": 12.0,
+          "Down": 8.0
+        },
+        "legacyTradeOnlyPayout": 12.0,
+        "legacyTradeOnlyPnl": 3.06,
+        "lifecycleCash": 3.0,
+        "correctLifecycleNetShares": {
+          "Up": 9.0,
+          "Down": 5.0
+        },
+        "correctLifecyclePayout": 9.0,
+        "correctPnl": 3.06,
+        "eligibleWhenLifecycleUnsupported": false,
+        "eligibleWhenLifecycleSupported": true,
+        "exclusion": "SPLIT/MERGE require supported inventory accounting or explicit exclusion"
+      }
+    ],
+    "tradeFillCount": 13,
+    "takerFillCount": 8,
+    "makerFillCount": 5,
+    "activityCount": 20,
+    "withoutLifecycleSupport": {
+      "settledEligibleRounds": 5,
+      "pnl": 61.49075,
+      "fees": 4.00925,
+      "wins": 4,
+      "losses": 1,
+      "winRatePercent": 80,
+      "maxDrawdown": 48,
+      "equityAfterEachEligibleRound": [
+        58.32,
+        10.32,
+        20.648,
+        54.5105,
+        61.49075
+      ]
+    },
+    "withLifecycleSupport": {
+      "settledEligibleRounds": 6,
+      "pnl": 64.55075,
+      "fees": 4.14925,
+      "wins": 5,
+      "losses": 1,
+      "winRatePercent": 83.33333333333333,
+      "maxDrawdown": 48,
+      "equityAfterEachEligibleRound": [
+        58.32,
+        10.32,
+        20.648,
+        54.5105,
+        61.49075,
+        64.55075
+      ]
+    },
+    "rebates": {
+      "linkedMaker": 1.25,
+      "linkedTaker": 0.5,
+      "linkedTotal": 1.75,
+      "unallocatedReward": 0.75,
+      "currentEndpointDuplicateMakerAmount": 1.25,
+      "tradingPnlMustRemain": 64.55075,
+      "optionalTradingPlusLinkedRebates": 66.30075
+    },
+    "knownLegacyFailure": {
+      "falseResolvedExtremeQuotePnl": 7.664,
+      "falseMissingInventoryPnl": 7,
+      "unsafeLegacyTotal": 79.21475
+    },
+    "unclaimedWinningShares": 149,
+    "bothSideRoundIds": [
+      "R3",
+      "R8"
+    ]
+  }
+}

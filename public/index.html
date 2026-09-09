@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta name="description" content="BTC 5m trader settlement analysis, equity curve, fill audit and rebates." />
+  <link rel="icon" href="data:," />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polymarket BTC 5m Equity Radar v5</title>
+  <link rel="stylesheet" href="/assets/radar.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="sigil" aria-hidden="true"></div>
+        <div>
+          <h1>Equity Radar v5</h1>
+          <div class="subtitle">BTC 5m · close-settlement P&amp;L · taker/maker fee model · live refresh</div>
+        </div>
+      </div>
+      <div class="status-pill" id="statusText" role="status" aria-live="polite"><span class="status-dot"></span>Ready. Uses the same settlement logic as the provided script. Equity chart uses the full visible range.</div>
+    </header>
+
+    <section class="panel controls">
+      <div>
+        <label for="addressInput">Polymarket address / proxy wallet</label>
+        <input id="addressInput" spellcheck="false" autocomplete="off" placeholder="0x762d2469DdFE50755fB96DDc54DF72Ae4b4D964c" />
+      </div>
+      <div>
+        <label for="startInput">Start date</label>
+        <input id="startInput" type="datetime-local" />
+      </div>
+      <div>
+        <label for="lookbackSelect">Visible period</label>
+        <select id="lookbackSelect">
+          <option value="all" selected>Loaded range</option>
+          <option value="1">Last 1h</option>
+          <option value="6">Last 6h</option>
+          <option value="24">Last 24h</option>
+        </select>
+      </div>
+      <div>
+        <label for="sortSelect">Sort</label>
+        <select id="sortSelect">
+          <option value="time" selected>Newest</option>
+          <option value="pnlDesc">Best P&amp;L</option>
+          <option value="pnlAsc">Worst P&amp;L</option>
+        </select>
+      </div>
+      <button class="btn" id="loadBtn" type="button">Load report</button>
+      <button class="btn secondary" id="walletBtn" type="button">Wallet</button>
+      <button class="btn secondary" id="demoBtn" type="button">Demo</button>
+    </section>
+
+    <div class="switchline">
+      <label><input id="autoRefresh" type="checkbox" checked /> Auto-refresh after load</label>
+      <label><input id="resolvedOnly" type="checkbox" /> Resolved only</label>
+      <label><input id="bothOnly" type="checkbox" /> Bought both Up and Down</label>
+      <span>Resolved wallet: <strong id="resolvedAddress">—</strong></span>
+      <span id="lastUpdated">Not loaded</span>
+      <button class="btn small secondary" id="auditBtn" type="button">Recheck P&amp;L</button>
+      <button class="btn small secondary" id="exportBtn" type="button" disabled>Export CSV</button>
+    </div>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-title"><h2>Cumulative equity</h2><span class="small" id="chartCaption">Waiting for data.</span></div>
+        <div class="chart-stats">
+          <div class="chart-stat"><div class="chart-stat-label">P&amp;L</div><div class="chart-stat-value" id="dayPnl">—</div></div>
+          <div class="chart-stat"><div class="chart-stat-label">Rounds</div><div class="chart-stat-value" id="dayRounds">0</div></div>
+          <div class="chart-stat"><div class="chart-stat-label">Win rate</div><div class="chart-stat-value" id="dayWinRate">—</div></div>
+          <div class="chart-stat"><div class="chart-stat-label">Average</div><div class="chart-stat-value" id="dayAverage">—</div></div>
+          <div class="chart-stat"><div class="chart-stat-label">Audit</div><div class="chart-stat-value" id="dayAudit">—</div></div>
+        </div>
+        <input id="chartCount" type="hidden" value="all" />
+        <div class="chart-wrap" id="chartWrap" style="display:none">
+          <canvas id="pnlChart"></canvas>
+          <div class="chart-empty" id="chartEmpty">Round P&amp;L chart disabled.</div>
+          <div class="tooltip" id="chartTooltip" hidden></div>
+        </div>
+        <div class="chart-wrap" id="balanceChartWrap">
+          <canvas id="balanceChart" role="img" aria-label="Cumulative settled BTC 5m trading P&amp;L"></canvas>
+          <div class="chart-empty" id="balanceChartEmpty">No cumulative equity yet.</div>
+          <div class="tooltip" id="balanceChartTooltip" hidden></div>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-title"><h2>Summary</h2><span class="small">close settlement</span></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total P&amp;L</div><div class="metric-value" id="totalPnl">—</div><div class="metric-note" id="pnlNote">No settled rounds</div></div>
+          <div class="metric"><div class="metric-label">Rounds</div><div class="metric-value" id="roundCount">—</div><div class="metric-note" id="roundNote">Loaded / resolved</div></div>
+          <div class="metric"><div class="metric-label">Up buy volume</div><div class="metric-value" id="upVolume">—</div><div class="metric-note" id="upNote">0 buy tx</div></div>
+          <div class="metric"><div class="metric-label">Down buy volume</div><div class="metric-value" id="downVolume">—</div><div class="metric-note" id="downNote">0 buy tx</div></div>
+          <div class="metric"><div class="metric-label">Both-side rounds</div><div class="metric-value" id="bothCount">—</div><div class="metric-note" id="bothNote">Up + Down in same window</div></div>
+          <div class="metric"><div class="metric-label">Live</div><div class="metric-value"><span id="livePulse" class="live-pulse paused"></span><button class="btn small secondary" id="liveToggle" type="button">Pause</button></div><div class="metric-note" id="liveStatus">Not started</div></div>
+        </div>
+        <div style="padding: 0 14px 14px;">
+          <div id="currentRoundSummary" class="current-box">Current round not loaded.</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="panel-title">
+        <h2>Markets / rounds</h2>
+        <span class="small">avg price, volume, shares, settlement P&amp;L</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th><th>Result</th><th>Up</th><th>Down</th><th>Buy volume</th><th>Sell volume</th><th>Payout / fee</th><th>API − calc</th><th>P&amp;L</th><th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="rowsBody"><tr><td colspan="10" class="empty"><strong>No data loaded</strong><br>Enter an address and start date.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="panel-title">
+        <h2>Live fills</h2>
+        <div style="display:flex;gap:10px;align-items:center"><label for="liveCount" style="margin:0">Rows</label><select id="liveCount" style="height:34px;width:100px"><option>20</option><option selected>50</option><option>100</option><option>200</option><option value="all">All</option></select></div>
+      </div>
+      <div class="table-wrap" style="max-height:360px">
+        <table style="min-width:980px"><thead><tr><th>Time</th><th>Round</th><th>Side</th><th>Outcome</th><th>Shares</th><th>Price</th><th>Notional</th><th>Tx</th></tr></thead><tbody id="liveBody"><tr><td colspan="8" class="empty">No fills loaded.</td></tr></tbody></table>
+      </div>
+    </section>
+    <details class="panel table-panel diagnostics" id="traderDiagnostics">
+      <summary class="panel-title"><h2>Trader diagnostics</h2><span class="small" id="diagnosticSummary">Risk, fees, coverage and rebates</span></summary>
+      <div class="metrics" id="diagnosticMetrics"></div>
+      <div class="caption" id="coverageNote"></div>
+      <div class="rebates-section">
+        <div class="current-kicker">Rebates · separate from trading P&amp;L</div>
+        <p class="source" id="rebatePayouts">No wallet loaded</p>
+        <div class="rebate-controls"><div><label for="rebateDate">Maker rebate date (UTC)</label><input type="date" id="rebateDate" /></div><button type="button" class="btn small secondary" id="rebateLoad" disabled>Fetch daily rebates</button></div>
+        <p class="source" id="rebateResult" role="status">Fetch a UTC day for the current visible markets.</p>
+        <div class="source">Daily market rebates and wallet-wide payments are two views of rebate activity. They are never added together. <a href="https://docs.polymarket.com/api-reference/rebates/get-current-rebated-fees-for-a-maker" target="_blank" rel="noopener noreferrer">Rebate source ↗</a></div>
+      </div>
+    </details>
+  </div>
+
+  <dialog id="detailDialog" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <div><h3 id="modalTitle">Details</h3><div class="modal-sub" id="modalSub"></div></div>
+      <button class="btn small secondary" id="closeModal" type="button">Close</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </dialog>
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script src="/assets/radar.js" defer></script>
+</body>
+</html>
