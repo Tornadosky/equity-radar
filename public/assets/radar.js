@@ -338,6 +338,20 @@
     els.status.innerHTML = `<span class="status-dot${cls}"></span>${escapeHtml(message)}`;
   }
 
+  function renderReportStatus() {
+    if (state.loading || state.auditLoading || (!state.demo && !state.proxyWallet)) return;
+    const rows = getVisibleRows().filter(row => row.resolved && row.pnl != null);
+    if (!rows.length) {
+      setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${state.timeframe} P&L: — · No included settled rounds.`);
+      return;
+    }
+    const total = roundTo(rows.reduce((sum, row) => sum + row.pnl, 0), 8);
+    const verified = rows.filter(row => row.auditStatus === 'verified').length;
+    const mismatches = rows.filter(row => row.auditStatus === 'mismatch').length;
+    const fallback = rows.filter(row => !row.calculationExact).length;
+    setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${state.timeframe} P&L: ${fmtMoney(total, true)} · ${rows.length} rounds · API✓ ${verified}${mismatches ? ` · mismatches ${mismatches}` : ''}${fallback ? ` · fallback ${fallback}` : ''}.`, mismatches ? 'loading' : 'ok');
+  }
+
   function toast(message, kind = '') {
     const div = document.createElement('div');
     div.className = `toast${kind ? ' ' + kind : ''}`;
@@ -970,7 +984,8 @@
           ...raw,
           asset: String(raw.asset || bucket.token || ''),
           conditionId: String(raw.conditionId || '').toLowerCase(),
-          curPrice: Number.isFinite(Number(raw.curPrice)) ? Number(raw.curPrice) : asNumber(raw.currPrice, NaN)
+          curPrice: nullableNumber(raw.curPrice) ?? nullableNumber(raw.currPrice),
+          currPrice: nullableNumber(raw.currPrice)
         };
         // Never manufacture totalPnl=0 when all PnL fields are absent.
         if (total != null && positionField(raw, 'totalPnl', 'total_pnl') == null) normalized.totalPnl = total;
@@ -1041,7 +1056,7 @@
 
     const updateProgress = () => {
       if (generation!==state.generation) return;
-      if (!silent) setStatus(`Точная сверка P&L по каждому рынку: ${state.auditCompleted}/${targets.length}…`, 'loading');
+      if (!silent) setStatus(`Сверка P&L по каждому рынку: ${state.auditCompleted}/${targets.length}…`, 'loading');
       refreshRowsFromCache();
       renderMetrics();
       renderRows();
@@ -1082,6 +1097,7 @@
       renderMetrics();
       renderRows();
       renderChart();
+      renderReportStatus();
     }
   }
 
@@ -1208,7 +1224,7 @@
     const winners = new Set();
     for (const row of positionRows || []) {
       if (!asBool(row.redeemable)) continue;
-      const price=nullableNumber(row.curPrice ?? row.currPrice);
+      const price=nullableNumber(row.curPrice) ?? nullableNumber(row.currPrice);
       const outcome=normalizeOutcome(row.outcome);
       if (!['Up','Down'].includes(outcome)) continue;
       if (price===1) winners.add(outcome);
@@ -1222,7 +1238,7 @@
   }
 
   function nullableNumber(value) {
-    if (value === null || value === undefined || value === '') return null;
+    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null;
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   }
@@ -1537,7 +1553,12 @@
       const closeDownPrice = resolved ? (winner === 'Down' ? 1 : 0) : closePrices.Down;
 
       const feeConfig = feeConfigForMarket(conditionId, market);
-      const settlement = resolved ? calculateRoundSettlement(group.trades, winner, feeConfig) : null;
+      // Fill fees and cash are known before resolution; an unknown winner must
+      // leave payout and settled P&L pending instead of displaying false zeros.
+      const fillAccounting = calculateRoundSettlement(group.trades, resolved ? winner : '', feeConfig);
+      const settlement = resolved ? fillAccounting : {
+        ...fillAccounting, pnl: null, pnlWithoutFees: null, payout: null, winningShares: null
+      };
       const qualityIssues=[];
       if (Object.values(closePrices).some(p=>p!=null && (p<0 || p>1))) qualityIssues.push('Invalid outcome price evidence');
       if (feeConfig.invalid) qualityIssues.push('Invalid fee metadata');
@@ -1613,8 +1634,8 @@
         pnl, pnlSource, pnlMethod: 'close-settlement-v2', pnlQuality: calculationExact ? 'calculated' : 'provisional',
         approximate, calculationExact,
         feeConfig, estimatedFee: settlement?.fee || 0, feeTotal: settlement?.fee || 0,
-        settlement, payout: settlement?.payout || 0,
-        winningShares: settlement?.winningShares || 0,
+        settlement, payout: settlement.payout,
+        winningShares: settlement.winningShares,
         netSharesUp: settlement?.shares?.Up ?? up.netShares,
         netSharesDown: settlement?.shares?.Down ?? down.netShares,
         grossFallback: settlement?.pnlWithoutFees ?? null,
@@ -1707,7 +1728,7 @@
       const delta = row.reconciliationDelta;
       const deltaClass = delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'neutral';
       let auditBadge = '<span class="badge live">расчёт по закрытию</span>';
-      if (row.auditStatus === 'verified') auditBadge = '<span class="badge exact">API ✓</span>';
+      if (row.auditStatus === 'verified') auditBadge = `<span class="badge exact" title="Within modeled P&amp;L tolerance: ${fmtMoney(row.auditTolerance)}">API ✓</span>`;
       else if (row.auditStatus === 'stale-zero') auditBadge = '<span class="badge wait">0 API отклонён</span>';
       else if (row.auditStatus === 'mismatch') auditBadge = '<span class="badge down">расхождение</span>';
       if (row.excluded) auditBadge = '<span class="badge down">Excluded from equity</span>';
@@ -1724,8 +1745,8 @@
           <td>${resultBadge(row)}<div class="source">${escapeHtml(closeText)}</div></td>
           <td>${sideCell(row.up, 'up-text')}</td>
           <td>${sideCell(row.down, 'down-text')}</td>
-          <td><div class="side-main">${fmtMoney(row.totalBuyNotional)}</div><div class="side-sub">с fee: ${row.resolved ? fmtMoney(row.buyCashWithFees) : '—'}</div></td>
-          <td><div class="side-main">${fmtMoney(row.totalSellNotional)}</div><div class="side-sub">после fee: ${row.resolved ? fmtMoney(row.sellCashAfterFees) : '—'}</div></td>
+          <td><div class="side-main">${fmtMoney(row.totalBuyNotional)}</div><div class="side-sub">с fee: ${fmtMoney(row.buyCashWithFees)}</div></td>
+          <td><div class="side-main">${fmtMoney(row.totalSellNotional)}</div><div class="side-sub">после fee: ${fmtMoney(row.sellCashAfterFees)}</div></td>
           <td><div class="side-main">payout ${settlementPrimary}</div><div class="source ${claimClass}">${escapeHtml(row.resolved ? row.claimInfo?.label || 'claim не влияет' : 'ожидаем resolution')}</div><div class="source">fee ${fmtMoney(row.feeTotal)}</div></td>
           <td><div class="audit-delta ${deltaClass}">${delta == null ? '—' : fmtMoney(delta, true)}</div><div class="source">официальный API − close calc</div></td>
           <td>
@@ -1908,7 +1929,7 @@
     els.dayWinRate.textContent = allRows.length ? `${winRate.toFixed(1)}%` : '—';
     els.dayAudit.textContent = allRows.length ? `${verified}/${allRows.length} API ✓` : '—';
     els.dayAudit.className = `chart-stat-value ${verified===allRows.length && verified ? 'positive' : 'neutral'}`;
-    els.dayAudit.title = allRows.length ? `Σ точек ${fmtMoney(total, true)} · конец cumulative ${fmtMoney(endpoint, true)}` : '';
+    els.dayAudit.title = allRows.length ? `Within per-round tolerance: max($0.03, 0.05% of buy + sell notional). Σ points ${fmtMoney(total, true)} · cumulative endpoint ${fmtMoney(endpoint, true)}. Dollar differences are in Trader diagnostics.` : '';
   }
 
   function drawChartMessage(canvas, empty, message, stateKey) {
@@ -2123,6 +2144,7 @@
     renderLiveFeed();
     renderChart();
     setLiveUi();
+    renderReportStatus();
   }
 
   function openDetails(key) {
@@ -2182,12 +2204,12 @@
       <div class="detail-grid detail-grid-wide">
         <div class="detail-box"><div class="detail-label">Финальный исход</div><div class="detail-value">${resultBadge(row)}</div><div class="source">Up ${row.closeUpPrice ?? '—'} · Down ${row.closeDownPrice ?? '—'}</div></div>
         <div class="detail-box"><div class="detail-label">P&amp;L по закрытию</div><div class="detail-value ${pnlClass}">${p}</div></div>
-        <div class="detail-box"><div class="detail-label">Payout</div><div class="detail-value">${row.resolved ? fmtMoney(row.payout) : '—'}</div><div class="source">${fmtShares(row.winningShares)} winning sh × $1</div></div>
-        <div class="detail-box"><div class="detail-label">Taker fee</div><div class="detail-value">${fmtMoney(row.feeTotal)}</div><div class="source">${escapeHtml(row.feeConfig?.source || '—')}</div></div>
+        <div class="detail-box"><div class="detail-label">Payout</div><div class="detail-value">${row.resolved ? fmtMoney(row.payout) : '—'}</div><div class="source">${row.resolved ? `${fmtShares(row.winningShares)} winning sh × $1` : 'Pending resolution'}</div></div>
+        <div class="detail-box"><div class="detail-label">Modeled taker fee</div><div class="detail-value">${fmtMoney(row.feeTotal)}</div><div class="source">${escapeHtml(row.feeConfig?.source || '—')}</div></div>
         <div class="detail-box"><div class="detail-label">BUY cash out</div><div class="detail-value">${fmtMoney(row.buyCashWithFees)}</div><div class="source">notional + fee</div></div>
         <div class="detail-box"><div class="detail-label">SELL cash in</div><div class="detail-value">${fmtMoney(row.sellCashAfterFees)}</div><div class="source">notional − fee</div></div>
         <div class="detail-box"><div class="detail-label">Claim</div><div class="detail-value" style="font-size:13px">${escapeHtml(claimText)}</div></div>
-        <div class="detail-box"><div class="detail-label">API − расчёт</div><div class="detail-value">${deltaText}</div><div class="source">${escapeHtml(auditText)}</div></div>
+        <div class="detail-box"><div class="detail-label">API − расчёт</div><div class="detail-value">${deltaText}</div><div class="source">${escapeHtml(auditText)} · tolerance ${fmtMoney(row.auditTolerance)}</div></div>
         <div class="detail-box"><div class="detail-label">Net shares Up</div><div class="detail-value up-text">${fmtShares(row.netSharesUp)}</div></div>
         <div class="detail-box"><div class="detail-label">Net shares Down</div><div class="detail-value down-text">${fmtShares(row.netSharesDown)}</div></div>
         <div class="detail-box"><div class="detail-label">Taker / maker</div><div class="detail-value">${row.settlement?.takerCount || 0} / ${row.settlement?.makerCount || 0}</div><div class="source">assumed ${row.settlement?.assumedTakerCount || 0}</div></div>
@@ -2202,7 +2224,7 @@
         <tbody>${fillRows || '<tr><td colspan="10">Нет fills</td></tr>'}</tbody></table>
       </div>
       <div class="formula">
-        <strong>Финальная формула:</strong> SELL после fee ${fmtMoney(row.sellCashAfterFees)} − BUY с fee ${fmtMoney(row.buyCashWithFees)} + payout ${fmtMoney(row.payout)} = <strong class="${pnlClass}">${p}</strong>.<br>
+        <strong>Финальная формула:</strong> SELL после fee ${fmtMoney(row.sellCashAfterFees)} − BUY с fee ${fmtMoney(row.buyCashWithFees)} + payout ${row.resolved ? fmtMoney(row.payout) : 'pending'} = <strong class="${pnlClass}">${p}</strong>.<br>
         BUY taker fee списывается дополнительно в collateral; SELL fee вычитается из proceeds. Maker fills имеют fee $0. Комиссия округляется отдельно для каждого fill до 5 знаков.<br>
         <strong>Claim не меняет результат:</strong> winning shares уже оцениваются по $1 сразу после resolution; redeem только переводит их в pUSD. ${marketLink}
       </div>`;
@@ -2223,7 +2245,7 @@
       lines.push([
         row.startSec ? new Date(row.startSec * 1000).toISOString() : '', row.eventSlug || row.slug || '', row.winner || '', row.resolved,
         row.resolutionSource || '', row.closeUpPrice ?? '', row.closeDownPrice ?? '', row.pnl ?? '', row.calculationExact,
-        row.payout, row.feeTotal, row.buyCashWithFees, row.sellCashAfterFees, row.apiPnl ?? '', row.reconciliationDelta ?? '', row.auditStatus,
+        row.payout ?? '', row.feeTotal, row.buyCashWithFees, row.sellCashAfterFees, row.apiPnl ?? '', row.reconciliationDelta ?? '', row.auditStatus,
         row.claimInfo?.status || '', row.claimInfo?.redeemableShares || 0,
         row.up.buyOps, row.up.buyFills, row.up.buyNotional, row.up.buyShares, row.up.sellOps, row.up.sellNotional, row.netSharesUp,
         row.down.buyOps, row.down.buyFills, row.down.buyNotional, row.down.buyShares, row.down.sellOps, row.down.sellNotional, row.netSharesDown,
@@ -2369,13 +2391,6 @@
       storageSet('pm-btc5m-lookback', String(els.lookback.value));
       storageSet('pm-btc5m-start', String(els.start?.value || ''));
 
-      const settledRows = state.rows.filter(row => row.resolved && row.pnl != null);
-      const total24 = roundTo(settledRows.reduce((sum, row) => sum + asNumber(row.pnl), 0), 8);
-      const verifiedCount = settledRows.filter(row => row.auditStatus === 'verified').length;
-      const staleCount = settledRows.filter(row => row.auditStatus === 'stale-zero').length;
-      const mismatchCount = settledRows.filter(row => row.auditStatus === 'mismatch').length;
-      const fallbackCount = settledRows.filter(row => !row.calculationExact).length;
-      setStatus(`Итог за период: ${fmtMoney(total24, true)} · ${settledRows.length} раундов · API✓ ${verifiedCount}${staleCount ? ` · нулей API отклонено ${staleCount}` : ''}${mismatchCount ? ` · расхождений ${mismatchCount}` : ''}${fallbackCount ? ` · fallback ${fallbackCount}` : ''}.`, mismatchCount ? 'loading' : 'ok');
       els.lastUpdated.textContent = `История ${new Date().toLocaleTimeString('ru-RU')}`;
       els.audit.disabled = false;
       render();
@@ -2391,6 +2406,7 @@
       if (generation!==state.generation) return;
       setLoading(false, silent);
       renderDiagnostics();
+      renderReportStatus();
       els.load.innerHTML = 'Load report';
     }
   }
@@ -2500,6 +2516,7 @@
       state.lastSettlementAt = Date.now();
       els.lastUpdated.textContent = `P&L ${new Date().toLocaleTimeString('ru-RU')}`;
       renderMetrics(); renderRows(); renderCurrentRound(); renderChart(); renderDiagnostics();
+      renderReportStatus();
     } catch (error) {
       if (generation!==state.generation) return;
       console.warn('Settlement refresh failed:', error);
@@ -2624,10 +2641,6 @@
     state.lastSettlementAt = Date.now();
     els.audit.disabled = true;
     els.resolvedAddress.textContent = 'Демо-данные';
-    const rows = state.rows.filter(row => row.resolved && row.pnl != null);
-    const total = roundTo(rows.reduce((sum, row) => sum + asNumber(row.pnl), 0), 8);
-    const stale = rows.filter(row => row.auditStatus === 'stale-zero').length;
-    setStatus(`Демо: итог ${fmtMoney(total, true)} · ${rows.length} раундов · нулей API отклонено ${stale} · cumulative проверен.`, 'ok');
     els.lastUpdated.textContent = `Демо ${new Date().toLocaleTimeString('ru-RU')}`;
     render();
   }
@@ -2675,7 +2688,7 @@
       ['Max drawdown',d.count?fmtMoney(d.drawdown):'—','Peak-to-trough settled P&L; starts at $0'],
       ['Profit factor',d.count?(d.profitFactor===Infinity?'∞':d.profitFactor==null?'—':d.profitFactor.toFixed(2)):'—','Winning P&L ÷ absolute losing P&L'],
       ['Gross P&L',d.count?fmtMoney(d.gross,true):'—','Before modeled fees; included settled rounds'],
-      ['Modeled fees',d.count?fmtMoney(d.fees):'—','Per-fill estimate; already deducted from P&L'],
+      ['Modeled fees',d.count?fmtMoney(d.fees):'—','Included settled rounds; already deducted from P&L'],
       ['Maker / taker',`${d.makers} / ${d.takers}`,`${d.unknown} unknown roles; conservative taker estimate`],
       ['Excluded rounds',String(d.excluded),'Excluded from curve, totals and profit factor']
     ];
@@ -2685,6 +2698,12 @@
     if (state.truncatedTrades) notes.push('Trade history hit a limit: equity withheld until a complete shorter range is loaded.');
     if (state.proxyWallet && !state.ledgerComplete) notes.push('Inventory events are unverified; model results remain provisional.');
     if (state.rows.length) notes.push(`${state.demo?'Demo':'Loaded'}: ${loadedRangeLabel()}. Filters apply to the chart, summary and market export.`);
+    if (d.count) {
+      const compared=rows.filter(row=>row.resolved && row.pnl!=null && nullableNumber(row.reconciliationDelta)!=null);
+      const net=compared.reduce((sum,row)=>sum+row.reconciliationDelta,0);
+      const absolute=compared.reduce((sum,row)=>sum+Math.abs(row.reconciliationDelta),0);
+      notes.push(`API ✓ means within per-round tolerance: max($0.03, 0.05% of buy + sell notional). ${compared.length}/${d.count} compared; net API − calc ${fmtMoney(net,true)}; sum of absolute gaps ${fmtMoney(absolute)}. This is reconciliation, not receipt verification.`);
+    }
     notes.push(`This is settled BTC ${state.timeframe} trading P&L from zero, not wallet balance or return on capital. Deposits, withdrawals, open-position marks and external token transfers are not reconstructed. Fee schedules and public maker/taker matching are model inputs, not transaction receipt proof.`);
     document.getElementById('coverageNote').textContent=notes.join(' ');
     const credits=state.ledgerEvents.filter(e=>['MAKER_REBATE','TAKER_REBATE'].includes(e.type));
@@ -2747,12 +2766,10 @@
     if (generation!==state.generation) return;
     refreshRowsFromCache();
     render();
-    const rows = state.rows.filter(row => row.resolved && row.pnl != null);
-    const total = roundTo(rows.reduce((sum, row) => sum + asNumber(row.pnl), 0), 8);
+    const rows = getVisibleRows().filter(row => row.resolved && row.pnl != null);
     const verified = rows.filter(row => row.auditStatus === 'verified').length;
     const stale = rows.filter(row => row.auditStatus === 'stale-zero').length;
     const mismatch = rows.filter(row => row.auditStatus === 'mismatch').length;
-    setStatus(`Итог за период: ${fmtMoney(total, true)} · API✓ ${verified}/${rows.length}${stale ? ` · нулей API отклонено ${stale}` : ''}${mismatch ? ` · расхождений ${mismatch}` : ''}.`, mismatch ? 'loading' : 'ok');
     toast(`Перепроверено: API✓ ${verified}, stale 0: ${stale}, расхождения: ${mismatch}.`);
   });
   els.autoRefresh.addEventListener('change', handleAutoRefreshChange);
@@ -2777,6 +2794,7 @@
     renderChart();
     renderDiagnostics();
     document.getElementById('rebateResult').textContent='Fetch a UTC day for the current visible markets.';
+    renderReportStatus();
   });
   els.start.addEventListener('change', () => {
     storageSet('pm-btc5m-start', els.start.value || '');

@@ -88,3 +88,22 @@ This addendum records changes after Windows commit `7a992ec`; earlier D01–D15 
 | Expanded regression coverage | Tests cover both intervals, obsolete responses, historical fee evidence, contradictory settlement sources, null rebates and gateway request sharing. These do not alter the product layout. |
 
 The existing diagnostics panel shows modeled fees already included in net P&L, gross P&L, drawdown, profit factor, role counts, coverage, observed wallet-wide rebate payouts, and separate daily maker accruals for visible markets. Daily accruals and payouts are not added together or to the settlement curve. Rewards, deposits, withdrawals, transfers and open-position marks are not reconstructed; the curve remains settled trading P&L from zero rather than wallet equity or return on capital.
+
+
+## Second verification — 9 September 2026
+
+| Change | Motivation and effect |
+|---|---|
+| Missing or malformed API prices remain unknown | JavaScript numeric coercion could turn an absent price into zero and falsely infer the opposite winner. Finite numbers and nonblank numeric strings are the accepted evidence; actual zero remains meaningful. |
+| Fees and cash before resolution | Open rounds now show their modeled fill fees, BUY cash, SELL cash, inventory and role counts in the existing table, detail modal and CSV. Payout and settled P&L remain pending. Previously the aggregate fields showed false zeros while fill details showed fees. Missing inventory can be flagged before resolution. |
+| One visible-period status total | The top banner now uses the same filters and included settled rows as the chart and summary, updating after loads, manual reconciliation, filters and live refreshes. It says `Visible 5m/15m P&L`. Loading and audit progress remain visible while requests run. This fixes differing scopes and stale totals. |
+| Explicit reconciliation tolerance | Existing API badges and details disclose the tolerance: max($0.03, 0.05% of round buy + sell notional). The collapsed diagnostics panel shows comparison coverage, signed net API-minus-calculation difference, and sum of absolute differences so positive/negative gaps cannot hide one another. No fee, P&L or tolerance formula was changed. |
+| More precise fee and pending labels | Detail fee is explicitly modeled. Pending payouts are blank in CSV and pending in details, not zero or the text `null`. Diagnostics fee totals explicitly refer to included settled rounds. |
+
+No CSS, page structure, controls, charts, spacing, colors, or layout changed in this verification. The changes correct data interpretation and labeling within the existing interface.
+
+### Remaining accounting scope
+
+The tested September reports use the current cash-fee convention. This is not full wallet equity, capital-adjusted return, or an on-chain receipt audit. Historical fee versions, possible additional builder fees and externally transferred inventory are not completely reconstructed. In particular, reports before the V2 migration are not validated by these tests: [Polymarket's changelog](https://docs.polymarket.com/changelog/predictions) dates V2 deployment to 28 April 2026; [the original exchange documentation](https://github.com/Polymarket/ctf-exchange/blob/main/docs/Overview.md) describes BUY fees collected in outcome tokens. Do not treat a model-complete/API-matched label as proof of exact historical paid fees.
+
+Current formula and rounding were cross-checked against [official fees](https://docs.polymarket.com/trading/fees). Maker/taker public-data classification and current metadata remain model evidence. No comparative product benchmark or claim of best-in-class coverage is made.
