@@ -227,7 +227,9 @@
     const title = String(record.title || '').toLowerCase();
     return eventSlug.includes('btc-updown-5m-')
       || slug.includes('btc-updown-5m-')
-      || (title.includes('bitcoin up or down') && (eventSlug.includes('5m') || slug.includes('5m')));
+      // '-5m-', not '5m': 'btc-updown-15m-...' contains '5m' and would otherwise be bucketed into
+      // 300s rounds it does not belong to, splitting one 15m market across up to three fake rounds.
+      || (title.includes('bitcoin up or down') && (eventSlug.includes('-5m-') || slug.includes('-5m-')));
   }
 
   function getStartSec(record) {
@@ -343,8 +345,28 @@
     if (nullableNumber(t.size) == null || Number(t.size) <= 0) return 'Invalid fill size';
     if (!normalizeTimestamp(t.timestamp)) return 'Missing fill timestamp';
     if (!/^0x[a-f0-9]{64}$/i.test(String(t.conditionId || ''))) return 'Missing condition ID';
-    if (t.usdcSize != null && (!Number.isFinite(Number(t.usdcSize)) || Number(t.usdcSize) < 0 || Math.abs(Number(t.usdcSize)-Number(t.size)*Number(t.price)) > Math.max(.005,Number(t.size)*Number(t.price)*.005))) return 'Inconsistent fill notional';
+    if (t.usdcSize != null && (!Number.isFinite(Number(t.usdcSize)) || Number(t.usdcSize) < 0 || !notionalEvidence(t).consistent)) return 'Inconsistent fill notional';
     return '';
+  }
+
+  // usdcSize is gross cash moved, so since the crypto taker fee launched it is the notional plus that
+  // fee on a BUY and minus it on a SELL. size x price remains the bare notional; a fee-sized gap is
+  // expected data, not a corrupt fill.
+  function notionalEvidence(trade) {
+    const size = Math.max(0, asNumber(trade?.size));
+    const price = Math.max(0, asNumber(trade?.price));
+    const computed = size * price;
+    const explicit = nullableNumber(trade?.usdcSize);
+    const fee = price > 0 && price < 1
+      ? Math.round((size * CRYPTO_TAKER_FEE_RATE * price * (1 - price) + Number.EPSILON) * 100000) / 100000
+      : 0;
+    const tolerance = Math.max(0.005, computed * 0.005);
+    const gap = explicit == null ? null : Math.min(
+      Math.abs(explicit - computed),
+      Math.abs(explicit - computed - fee),
+      Math.abs(explicit - computed + fee)
+    );
+    return { computed, explicit, fee, tolerance, gap, consistent: gap == null || gap <= tolerance };
   }
 
   function normalizeTradeRecord(record) {
@@ -362,13 +384,12 @@
   }
 
   function tradeNotional(trade) {
-    const size = Math.max(0, asNumber(trade?.size));
-    const price = Math.max(0, asNumber(trade?.price));
-    const computed = size * price;
-    const explicit = nullableNumber(trade?.usdcSize);
+    const { computed, explicit, tolerance, consistent } = notionalEvidence(trade);
     if (explicit != null && explicit >= 0) {
-      const tolerance = Math.max(0.005, Math.abs(computed) * 0.005);
-      if (!computed || Math.abs(explicit - computed) <= tolerance) return explicit;
+      // Only usdcSize is available when size or price is missing; otherwise size x price is the
+      // notional the settlement model expects, and usdcSize would double-count the modeled fee.
+      if (!computed) return explicit;
+      if (!consistent && Math.abs(explicit - computed) <= tolerance) return explicit;
     }
     return computed;
   }
