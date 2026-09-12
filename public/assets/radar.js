@@ -7,7 +7,13 @@
   const CLOB_API = `${window.location.origin}/api/clob`;
   const CRYPTO_TAKER_FEE_RATE = 0.07;
   const DEFAULT_CRYPTO_FEE = Object.freeze({ rate: CRYPTO_TAKER_FEE_RATE, exponent: 1, takerOnly: true, source: 'crypto default' });
-  const TIMEFRAMES = Object.freeze({ '5m': Object.freeze({seconds:300}), '15m': Object.freeze({seconds:900}) });
+  const TIMEFRAMES = Object.freeze({ '5m': Object.freeze({seconds:300}), '15m': Object.freeze({seconds:900}), '1h': Object.freeze({seconds:3600}) });
+  const COINS = Object.freeze({btc:'Bitcoin', eth:'Ethereum', sol:'Solana'});
+  const MARKET_KEYS = Object.freeze(Object.keys(COINS).flatMap(symbol => Object.keys(TIMEFRAMES).map(timeframe => `${symbol}-${timeframe}`)));
+  const MAX_MARKET_SECONDS = 3600;
+  const MARKET_STORAGE_KEY = 'pm-equity-markets-v1';
+  const hourlyStarts = new Map();
+  const easternTime = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', year:'numeric', month:'numeric', day:'numeric', hour:'numeric', hourCycle:'h23'});
   const HISTORY_HOURS = 24;
   const LIVE_POLL_MS = 2500;
   const SETTLEMENT_REFRESH_MS = 15000;
@@ -19,7 +25,7 @@
 
   const els = {
     address: document.getElementById('addressInput'),
-    timeframe: document.getElementById('timeframeSelect'),
+    marketSelection: document.getElementById('marketSelection'),
     lookback: document.getElementById('lookbackSelect'),
     start: document.getElementById('startInput'),
     load: document.getElementById('loadBtn'),
@@ -76,7 +82,9 @@
 
   const state = {
     generation: 0,
-    timeframe: '5m',
+    selectedMarkets: new Set(['btc-5m']),
+    activityCoverageEnd: 0,
+    scopeIssueConditions: new Set(),
     takerCoverageEnd: 0,
     ledgerEvents: [],
     ledgerComplete: false,
@@ -225,78 +233,162 @@
   }
 
   function normalizeTimeframe(value) {
-    return value === '15m' ? '15m' : '5m';
+    return Object.hasOwn(TIMEFRAMES, value) ? value : '5m';
   }
 
-  function getTimeframe() {
-    return TIMEFRAMES[normalizeTimeframe(state.timeframe)];
+  function parseMarketSlug(value, record = {}) {
+    const slug = String(value || '').toLowerCase();
+    const epoch = slug.match(/^(btc|eth|sol)-updown-(5m|15m|1h)-(\d{10}|\d{13})$/);
+    if (epoch) {
+      const startSec = normalizeTimestamp(epoch[3]);
+      return {symbol:epoch[1], timeframe:epoch[2], marketKey:`${epoch[1]}-${epoch[2]}`, seconds:TIMEFRAMES[epoch[2]].seconds, startSec};
+    }
+    // Hourly markets are named by their candle's Eastern time, NOT their listing
+    // time or the timestamp of a fill (which may precede the candle).
+    const hour = slug.match(/^(bitcoin|ethereum|solana)-up-or-down-([a-z]+)-(\d{1,2})-(\d{4})-(1[0-2]|[1-9])(am|pm)-et$/);
+    if (!hour) return null;
+    const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    const month = months.indexOf(hour[2]);
+    if (month < 0) return null;
+    let candidates = hourlyStarts.get(slug);
+    if (!candidates) {
+      const year = Number(hour[4]), day = Number(hour[3]), h = Number(hour[5]) % 12 + (hour[6] === 'pm' ? 12 : 0);
+      const local = Date.UTC(year, month, day, h);
+      candidates = [4,5].map(offset => local / 1000 + offset * 3600).filter(sec => {
+        const parts = Object.fromEntries(easternTime.formatToParts(new Date(sec * 1000)).map(p => [p.type,p.value]));
+        return Number(parts.year) === year && Number(parts.month) === month + 1 && Number(parts.day) === day && Number(parts.hour) === h;
+      });
+      if (hourlyStarts.size >= 2048) hourlyStarts.clear();
+      hourlyStarts.set(slug, candidates);
+    }
+    // Reject nonexistent spring-forward hours. For a repeated fall-back hour,
+    // require an explicit candle start/end rather than guessing an occurrence.
+    let startSec = candidates.length === 1 ? candidates[0] : 0;
+    if (candidates.length > 1) {
+      const explicitStart = Date.parse(record.eventStartTime || '') / 1000;
+      const explicitEnd = Date.parse(record.endDate || '') / 1000 - 3600;
+      startSec = candidates.find(sec => sec === explicitStart || sec === explicitEnd) || 0;
+    }
+    if (!startSec) return null;
+    const symbol = {bitcoin:'btc',ethereum:'eth',solana:'sol'}[hour[1]];
+    return {symbol, timeframe:'1h', marketKey:`${symbol}-1h`, seconds:3600, startSec};
   }
 
-  function btcMarketSlug(record) {
-    const slugs = [record?.eventSlug, record?.slug].map(value => String(value || '').toLowerCase());
-    const matches = slugs.map(slug => slug.match(/^btc-updown-(5m|15m)-(\d{10}|\d{13})$/)).filter(Boolean);
-    // Conflicting market/event evidence is unsafe to assign to either report.
-    if (!matches.length || matches.some(match => match[1] !== matches[0][1] || normalizeTimestamp(match[2]) !== normalizeTimestamp(matches[0][2]))) return null;
-    return { timeframe: matches[0][1], startSec: normalizeTimestamp(matches[0][2]) };
+  function looksLikeSupportedSlug(value) {
+    return /^(?:(?:btc|eth|sol)-updown-(?:5m|15m|1h)-|(?:bitcoin|ethereum|solana)-up-or-down-)/i.test(String(value || ''));
   }
 
-  function isBtcMarket(record) {
-    return btcMarketSlug(record)?.timeframe === state.timeframe;
+  function marketDescriptor(record) {
+    const slugs = [record?.eventSlug, record?.slug].filter(Boolean);
+    const parsed = slugs.map(slug => parseMarketSlug(slug, record));
+    if (slugs.some((slug,i) => looksLikeSupportedSlug(slug) && !parsed[i])) return null;
+    const matches = parsed.filter(Boolean);
+    // Keep unrelated event wrappers compatible, but never assign contradictory
+    // asset, interval or start-time evidence to either market.
+    if (!matches.length || matches.some(m => m.marketKey !== matches[0].marketKey || m.startSec !== matches[0].startSec)) return null;
+    return matches[0];
+  }
+
+  function isSupportedMarket(record) {
+    return Boolean(marketDescriptor(record));
+  }
+
+  function keepSupportedTrades(rows) {
+    const accepted = [];
+    for (const row of rows) {
+      if (isSupportedMarket(row)) accepted.push(row);
+      else if ([row?.slug,row?.eventSlug].some(looksLikeSupportedSlug)) {
+        const id = String(row.conditionId || '').toLowerCase();
+        if (id) state.scopeIssueConditions.add(id);
+        const warning = 'Some crypto fills have unsupported, ambiguous or conflicting market identifiers and were omitted. Affected known conditions are excluded; supported-market coverage may be incomplete.';
+        if (!state.qualityWarnings.includes(warning)) state.qualityWarnings.push(warning);
+      }
+    }
+    return accepted;
   }
 
   function isBtc5m(record) {
-    return btcMarketSlug(record)?.timeframe === '5m';
+    return marketDescriptor(record)?.marketKey === 'btc-5m';
+  }
+
+  function marketKeyFor(record) {
+    return MARKET_KEYS.includes(record?.marketKey) ? record.marketKey : marketDescriptor(record)?.marketKey || '';
+  }
+
+  function isSelectedMarket(record) {
+    return state.selectedMarkets.has(marketKeyFor(record));
+  }
+
+  function getTimeframe(record) {
+    return TIMEFRAMES[normalizeTimeframe(record?.timeframe || marketDescriptor(record)?.timeframe)];
   }
 
   function getStartSec(record) {
-    const market = btcMarketSlug(record);
-    if (market?.timeframe === state.timeframe) return market.startSec;
-    const ts = normalizeTimestamp(record.timestamp);
-    return ts ? Math.floor(ts / getTimeframe().seconds) * getTimeframe().seconds : 0;
+    return marketDescriptor(record)?.startSec || 0;
   }
 
-  function syncTimeframeLabels() {
-    els.timeframe.value = state.timeframe;
-    document.title = `Polymarket BTC ${state.timeframe} Equity Radar v5`;
-    document.getElementById('marketSubtitle').textContent = `BTC ${state.timeframe} · close-settlement P&L · taker/maker fee model · live refresh`;
-    els.balanceChart.setAttribute('aria-label', `Cumulative settled BTC ${state.timeframe} trading P&L`);
+  function marketLabel(record) {
+    const key = typeof record === 'string' ? record : marketKeyFor(record);
+    if (!MARKET_KEYS.includes(key)) return 'Unknown market';
+    const [symbol,timeframe] = key.split('-');
+    return `${symbol.toUpperCase()} ${timeframe}`;
   }
 
-  async function handleTimeframeChange() {
-    const next = normalizeTimeframe(els.timeframe.value);
-    if (next === state.timeframe) { syncTimeframeLabels(); return; }
-    const wasDemo = state.demo;
-    const wallet = state.loading ? extractAddress(els.address.value)
-      : state.inputAddress || extractAddress(state.proxyWallet) || extractAddress(els.address.value);
-    // A scope change is a new report. Late history, audit and rebate results cannot enter it.
-    state.generation++;
-    state.timeframe = next;
-    storageSet('pm-btc-timeframe', next);
+  function selectionLabel() {
+    if (!state.selectedMarkets.size) return 'No markets selected';
+    return Object.keys(COINS).map(symbol => {
+      const intervals = Object.keys(TIMEFRAMES).filter(tf => state.selectedMarkets.has(`${symbol}-${tf}`));
+      return intervals.length ? `${symbol.toUpperCase()} ${intervals.join(' + ')}` : '';
+    }).filter(Boolean).join(' · ');
+  }
+
+  function normalizeMarketSelection(keys) {
+    if (!Array.isArray(keys)) return ['btc-5m'];
+    return MARKET_KEYS.filter(key => keys.includes(key));
+  }
+
+  function syncMarketLabels() {
+    const label = selectionLabel();
+    document.title = `Polymarket ${label} Equity Radar`;
+    document.getElementById('marketSubtitle').textContent = `${label} · close-settlement P&L · live refresh`;
+    els.balanceChart.setAttribute('aria-label', `Cumulative settled trading P&L: ${label}`);
+    els.marketSelection.querySelectorAll('input[data-market-key]').forEach(input => { input.checked = state.selectedMarkets.has(input.dataset.marketKey); });
+    document.getElementById('marketSelectionNote').textContent = state.selectedMarkets.size
+      ? `${state.selectedMarkets.size} of ${MARKET_KEYS.length} enabled. Filters update equity, totals, diagnostics, market CSV and live fills without reloading.`
+      : 'No markets selected. Enable at least one market to display equity; loaded data is retained.';
+  }
+
+  function setMarketSelection(keys) {
+    state.selectedMarkets = new Set(normalizeMarketSelection(keys));
+    storageSet(MARKET_STORAGE_KEY, JSON.stringify([...state.selectedMarkets]));
+    // A view change is not a new wallet report: retain history, in-flight loads,
+    // fee metadata and audits. Only results tied to the old view are invalidated.
     els.dialog.close();
     els.chartTooltip.hidden = true; els.balanceChartTooltip.hidden = true;
     invalidateRebates();
-    Object.assign(state, {
-      demo:false, proxyWallet:'', inputAddress:'', rows:[], allTrades:[], currentPositions:[], closedPositions:[],
-      markets:new Map(), clobMarkets:new Map(), marketPnlCache:new Map(), takerTrades:[],
-      takerHistoryComplete:false, takerCoverageEnd:0, takerClassifiedCount:0, takerAssumedCount:0,
-      ledgerEvents:[], ledgerComplete:false, ledgerCoverageEnd:0, qualityWarnings:[], truncatedTrades:false,
-      tradeKeys:new Set(), newTradeKeys:new Map(), livePolling:false, settlementLoading:false, auditLoading:false,
-      auditCompleted:0, auditFailed:0, lastTradeTimestamp:0, lastLoadAt:0, lastLiveAt:0, lastSettlementAt:0,
-      historySinceSec:0, chartHitPoints:[], chartRows:[], balanceHitPoints:[], balanceRows:[]
-    });
-    setLoading(false);
-    els.audit.textContent = 'Recheck P&L';
-    els.resolvedAddress.textContent = '—'; els.lastUpdated.textContent = 'Not loaded';
-    syncTimeframeLabels();
+    syncMarketLabels();
     render();
-    if (wasDemo) { showDemo(); return; }
-    if (wallet) { els.address.value = wallet; await loadReport(); return; }
-    setStatus(`BTC ${next} selected. Enter an address and load a report.`);
   }
 
-  function formatRange(startSec) {
+  function restoreMarketSelection(params) {
+    if (params.has('markets')) return normalizeMarketSelection(params.get('markets').split(','));
+    if (params.has('timeframe')) return [`btc-${normalizeTimeframe(params.get('timeframe'))}`];
+    const saved = storageGet(MARKET_STORAGE_KEY);
+    if (saved !== null) {
+      try {
+        const keys = JSON.parse(saved);
+        if (Array.isArray(keys)) {
+          const valid = normalizeMarketSelection(keys);
+          if (!keys.length || valid.length) return valid;
+        }
+      } catch (_) {}
+    }
+    return [`btc-${normalizeTimeframe(storageGet('pm-btc-timeframe'))}`];
+  }
+
+  function formatRange(startSec, seconds = 300) {
     if (!startSec) return 'Время неизвестно';
-    return `${dateFmt.format(new Date(startSec * 1000))} — ${shortTimeFmt.format(new Date((startSec + getTimeframe().seconds) * 1000))}`;
+    return `${dateFmt.format(new Date(startSec * 1000))} — ${shortTimeFmt.format(new Date((startSec + seconds) * 1000))}`;
   }
 
   function formatDuration(seconds) {
@@ -342,14 +434,14 @@
     if (state.loading || state.auditLoading || (!state.demo && !state.proxyWallet)) return;
     const rows = getVisibleRows().filter(row => row.resolved && row.pnl != null);
     if (!rows.length) {
-      setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${state.timeframe} P&L: — · No included settled rounds.`);
+      setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${selectionLabel()} P&L: — · No included settled rounds.`);
       return;
     }
     const total = roundTo(rows.reduce((sum, row) => sum + row.pnl, 0), 8);
     const verified = rows.filter(row => row.auditStatus === 'verified').length;
     const mismatches = rows.filter(row => row.auditStatus === 'mismatch').length;
     const fallback = rows.filter(row => !row.calculationExact).length;
-    setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${state.timeframe} P&L: ${fmtMoney(total, true)} · ${rows.length} rounds · API✓ ${verified}${mismatches ? ` · mismatches ${mismatches}` : ''}${fallback ? ` · fallback ${fallback}` : ''}.`, mismatches ? 'loading' : 'ok');
+    setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${selectionLabel()} P&L: ${fmtMoney(total, true)} · ${rows.length} rounds · API✓ ${verified}${mismatches ? ` · mismatches ${mismatches}` : ''}${fallback ? ` · fallback ${fallback}` : ''}.`, mismatches ? 'loading' : 'ok');
   }
 
   function toast(message, kind = '') {
@@ -583,7 +675,7 @@
   async function fetchActivityHistory(user, sinceSec, endSec) {
     const result=await fetchActivityWindow(user,sinceSec,endSec);
     state.truncatedTrades = state.truncatedTrades || !result.complete;
-    return dedupeTrades(result.rows).filter(row=>row.timestamp>=sinceSec && row.timestamp<=endSec && isBtcMarket(row));
+    return keepSupportedTrades(dedupeTrades(result.rows).filter(row=>row.timestamp>=sinceSec && row.timestamp<=endSec));
   }
 
   async function fetchRecentActivity(user, sinceSec, endSec) {
@@ -608,7 +700,7 @@
       if (oldest <= sinceSec) break;
       if (offset === 1000) state.truncatedTrades = true;
     }
-    return dedupeTrades(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec && isBtcMarket(row));
+    return keepSupportedTrades(dedupeTrades(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec));
   }
 
   async function fetchTradeHistory(user, sinceSec, endSec) {
@@ -647,7 +739,7 @@
       }
     }
     return {
-      trades: prepareTradeBatch(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec && isBtcMarket(row)),
+      trades: prepareTradeBatch(all).filter(row => normalizeTimestamp(row.timestamp) >= sinceSec && isSupportedMarket(row)),
       complete, coverageEnd
     };
   }
@@ -704,7 +796,7 @@
   function mergeTakerTrades(existing, incoming) {
     const map=new Map();
     for (const rows of [existing,incoming]) for (const row of prepareTradeBatch(rows || [])) map.set(tradeKey(row),row);
-    return [...map.values()].filter(isBtcMarket);
+    return [...map.values()].filter(isSupportedMarket);
   }
 
   async function fetchCurrentPositions(user) {
@@ -1036,7 +1128,7 @@
     for (const group of groups || []) {
       const conditionId = String(group.conditionId || '').toLowerCase();
       if (!/^0x[a-f0-9]{64}$/.test(conditionId)) continue;
-      const endSec = (group.startSec || 0) + getTimeframe().seconds;
+      const endSec = (group.startSec || 0) + getTimeframe(group).seconds;
       if (!group.startSec || endSec > nowSec - 5) continue;
       if (recentOnly && endSec < nowSec - 1800) continue;
       const cached = state.marketPnlCache.get(conditionId);
@@ -1105,28 +1197,24 @@
     const groups = new Map();
     for (const trade of trades) {
       const ts = normalizeTimestamp(trade.timestamp);
-      if (!ts || ts < sinceSec - getTimeframe().seconds || !isBtcMarket(trade)) continue;
+      const info = marketDescriptor(trade);
+      if (!ts || ts < sinceSec || !info) continue;
       const conditionId = String(trade.conditionId || '').toLowerCase();
       const eventSlug = trade.eventSlug || trade.slug || '';
       const key = conditionId || eventSlug;
       if (!key) continue;
       if (!groups.has(key)) {
         groups.set(key, {
-          key,
-          conditionId,
-          eventSlug,
-          slug: trade.slug || eventSlug,
-          title: trade.title || `Bitcoin Up or Down — ${state.timeframe}`,
-          startSec: getStartSec(trade),
-          trades: []
+          key, conditionId, eventSlug, slug:trade.slug || eventSlug,
+          title:trade.title || `${COINS[info.symbol]} Up or Down — ${info.timeframe}`,
+          ...info, trades:[]
         });
       }
       const group = groups.get(key);
+      if (group.marketKey !== info.marketKey || group.startSec !== info.startSec) group.identityConflict = true;
       group.trades.push(trade);
-      if (!group.startSec) group.startSec = getStartSec(trade);
-      if (!group.title && trade.title) group.title = trade.title;
     }
-    return [...groups.values()].filter(group => group.startSec && group.startSec + getTimeframe().seconds >= sinceSec);
+    return [...groups.values()].filter(group => group.startSec + group.seconds >= sinceSec);
   }
 
   function indexRows(rows) {
@@ -1266,7 +1354,7 @@
     if (feeFlag !== undefined && !asBool(feeFlag)) {
       return { rate: 0, exponent: 1, takerOnly: true, source: 'Gamma: fees disabled', exact: true };
     }
-    return { ...DEFAULT_CRYPTO_FEE, exact: false, source: 'BTC crypto fallback' };
+    return { ...DEFAULT_CRYPTO_FEE, exact: false, source: 'crypto fallback' };
   }
 
   function feeForTrade(trade, feeConfig) {
@@ -1349,12 +1437,18 @@
   }
 
   function buildCumulativeSeries(rows, startSec) {
-    const sorted = (rows || []).slice().sort((a, b) => a.endSec - b.endSec);
-    const points = [{ row: null, timestamp: startSec, value: 0, roundPnl: 0, initial: true }];
+    const sorted = (rows || []).filter(row => row.pnl != null && Number.isFinite(row.pnl) && Number.isFinite(row.endSec))
+      .slice().sort((a, b) => a.endSec - b.endSec || String(a.key || a.conditionId || '').localeCompare(String(b.key || b.conditionId || '')) || a.pnl - b.pnl);
+    const points = [{row:null, rows:[], timestamp:startSec, value:0, roundPnl:0, initial:true}];
     let total = 0;
-    for (const row of sorted) {
-      total = roundTo(total + asNumber(row.pnl), 8);
-      points.push({ row, timestamp: row.endSec, value: total, roundPnl: asNumber(row.pnl), initial: false });
+    for (let i = 0; i < sorted.length;) {
+      const timestamp = sorted[i].endSec, closing = [];
+      while (i < sorted.length && sorted[i].endSec === timestamp) closing.push(sorted[i++]);
+      const roundPnl = roundTo(closing.reduce((sum,row) => sum + row.pnl, 0), 8);
+      total = roundTo(total + roundPnl, 8);
+      // Simultaneous closes are one portfolio observation. Arbitrary table order
+      // must not invent an intermediate peak/trough or change max drawdown.
+      points.push({row:closing.length === 1 ? closing[0] : null, rows:closing, timestamp, value:total, roundPnl, initial:false});
     }
     return points;
   }
@@ -1531,7 +1625,7 @@
       const verified = state.marketPnlCache.get(conditionId) || null;
       const verifiedRows = verified?.ok ? (verified.rows || []) : [];
       const conditionPositionRows = [...currentConditionRows, ...closedConditionRows, ...verifiedRows];
-      const endSec = group.startSec + getTimeframe().seconds;
+      const endSec = group.startSec + getTimeframe(group).seconds;
       const isPastEnd = nowSec >= endSec;
 
       const closePrices = readOutcomePriceMap(market);
@@ -1560,6 +1654,14 @@
         ...fillAccounting, pnl: null, pnlWithoutFees: null, payout: null, winningShares: null
       };
       const qualityIssues=[];
+      if (group.identityConflict || state.scopeIssueConditions.has(conditionId)) qualityIssues.push('Conflicting or unclassified market identity for condition ID');
+      // Hourly books can trade days before their candle starts. A candle-aligned
+      // fetch alone does not prove opening inventory or the cost basis is complete.
+      if (!state.demo && group.timeframe === '1h') {
+        const opened = Date.parse(market?.startDate || '') / 1000;
+        if (!Number.isFinite(opened)) qualityIssues.push('Hourly opening history unverified; market opening time unavailable');
+        else if (opened < state.historySinceSec) qualityIssues.push('Hourly market opened before loaded history; choose an earlier start date');
+      }
       if (Object.values(closePrices).some(p=>p!=null && (p<0 || p>1))) qualityIssues.push('Invalid outcome price evidence');
       if (feeConfig.invalid) qualityIssues.push('Invalid fee metadata');
       if (resolutionConflict) qualityIssues.push('Conflicting resolution evidence');
@@ -1678,7 +1780,7 @@
   }
 
   function getVisibleRows() {
-    let rows = getPeriodRows();
+    let rows = getPeriodRows().filter(isSelectedMarket);
     if (els.resolvedOnly.checked) rows = rows.filter(row => row.resolved);
     if (els.bothOnly.checked) rows = rows.filter(row => row.bothSides);
     const sort = els.sort.value;
@@ -1714,7 +1816,7 @@
     const visible = getVisibleRows();
     els.export.disabled = visible.length === 0;
     if (!visible.length) {
-      const reason = state.rows.length ? 'Измените фильтры: данные загружены, но строки скрыты.' : `Для выбранного адреса в загруженном периоде BTC ${state.timeframe} сделки не найдены.`;
+      const reason = state.rows.length ? 'Измените фильтры: данные загружены, но строки скрыты.' : `Для выбранного адреса в загруженном периоде ${selectionLabel()} сделки не найдены.`;
       els.body.innerHTML = `<tr><td colspan="10" class="empty"><strong>Нет строк для отображения</strong>${escapeHtml(reason)}</td></tr>`;
       return;
     }
@@ -1738,8 +1840,8 @@
       return `
         <tr>
           <td>
-            <div class="market-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</div>
-            <div class="market-time">${escapeHtml(formatRange(row.startSec))} · <a class="link-btn" href="${marketUrl}" target="_blank" rel="noopener noreferrer">рынок ↗</a></div>
+            <div class="source">${escapeHtml(marketLabel(row))}</div><div class="market-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</div>
+            <div class="market-time">${escapeHtml(formatRange(row.startSec, getTimeframe(row).seconds))} · <a class="link-btn" href="${marketUrl}" target="_blank" rel="noopener noreferrer">рынок ↗</a></div>
             <div class="source">${row.totalBuyOps} buy tx · ${row.totalFills} fills</div>
           </td>
           <td>${resultBadge(row)}<div class="source">${escapeHtml(closeText)}</div></td>
@@ -1795,27 +1897,24 @@
 
   function renderCurrentRound() {
     const nowSec = Math.floor(Date.now() / 1000);
-    const currentStart = Math.floor(nowSec / getTimeframe().seconds) * getTimeframe().seconds;
-    const row = state.rows.find(item => item.startSec === currentStart) || null;
-    const remaining = currentStart + getTimeframe().seconds - nowSec;
-    const up = row?.up || { buyOps: 0, buyFills: 0, buyNotional: 0, buyShares: 0, avgBuy: 0 };
-    const down = row?.down || { buyOps: 0, buyFills: 0, buyNotional: 0, buyShares: 0, avgBuy: 0 };
-    const total = (row?.totalBuyNotional || 0) - (row?.totalSellNotional || 0);
-
-    els.currentRoundSummary.innerHTML = `
-      <div class="current-round-head">
-        <div>
-          <div class="current-kicker">Текущий BTC ${state.timeframe} раунд</div>
-          <div class="current-title">${escapeHtml(formatRange(currentStart))}</div>
+    if (!state.selectedMarkets.size) {
+      els.currentRoundSummary.textContent = 'No markets selected.';
+      return;
+    }
+    const current = new Map(state.rows.filter(row => row.startSec <= nowSec && row.endSec > nowSec && isSelectedMarket(row)).map(row => [row.marketKey,row]));
+    els.currentRoundSummary.innerHTML = [...state.selectedMarkets].map(key => {
+      const seconds = TIMEFRAMES[key.split('-')[1]].seconds;
+      const start = Math.floor(nowSec / seconds) * seconds;
+      const row = current.get(key);
+      return `<div class="current-market">
+        <div class="current-round-head"><div><div class="current-kicker">${escapeHtml(marketLabel(key))} · current round</div><div class="source">${escapeHtml(formatRange(start,seconds))}</div></div><span class="badge live">${formatDuration(start + seconds - nowSec)}</span></div>
+        <div class="current-grid">
+          <div class="current-box"><span>Up buys</span><strong class="up-text">${fmtMoney(row?.up.buyNotional || 0)}</strong><small>${row?.up.buyFills || 0} fills</small></div>
+          <div class="current-box"><span>Down buys</span><strong class="down-text">${fmtMoney(row?.down.buyNotional || 0)}</strong><small>${row?.down.buyFills || 0} fills</small></div>
         </div>
-        <span class="badge live">${formatDuration(remaining)}</span>
-      </div>
-      <div class="current-grid">
-        <div class="current-box"><span>Up</span><strong class="up-text">${fmtMoney(up.buyNotional)}</strong><small>${up.buyOps} tx · ${up.buyFills} fills · ${fmtShares(up.buyShares)} sh${up.buyShares ? ` · ${fmtPrice(up.avgBuy)}` : ''}</small></div>
-        <div class="current-box"><span>Down</span><strong class="down-text">${fmtMoney(down.buyNotional)}</strong><small>${down.buyOps} tx · ${down.buyFills} fills · ${fmtShares(down.buyShares)} sh${down.buyShares ? ` · ${fmtPrice(down.avgBuy)}` : ''}</small></div>
-        <div class="current-box"><span>Чисто вложено</span><strong>${fmtMoney(total)}</strong><small>покупки − продажи, без payout</small></div>
-        <div class="current-box"><span>Последняя сделка</span><strong>${row?.lastTradeSec ? timeFmt.format(new Date(row.lastTradeSec * 1000)) : '—'}</strong><small>${row ? `${row.totalFills} fills в окне` : 'в этом окне сделок пока нет'}</small></div>
+        <div class="source">${row ? `${row.totalFills} fills · buys − sells ${fmtMoney(row.totalBuyNotional-row.totalSellNotional)}` : 'No loaded fills for this round'}</div>
       </div>`;
+    }).join('');
   }
 
   function cleanupNewTradeKeys() {
@@ -1830,7 +1929,7 @@
     const countValue = els.liveCount.value;
     const maxRows = countValue === 'all' ? Infinity : Number(countValue) || 50;
     const trades = state.allTrades
-      .filter(isBtcMarket)
+      .filter(isSelectedMarket)
       .slice()
       .sort((a, b) => normalizeTimestamp(b.timestamp) - normalizeTimestamp(a.timestamp))
       .slice(0, maxRows);
@@ -1853,7 +1952,7 @@
         : '—';
       return `<tr class="${isNew ? 'new-trade' : ''}">
         <td><strong>${escapeHtml(ts ? timeFmt.format(new Date(ts * 1000)) : '—')}</strong></td>
-        <td><span class="live-round-time">${escapeHtml(start ? `${shortTimeFmt.format(new Date(start * 1000))}–${shortTimeFmt.format(new Date((start + getTimeframe().seconds) * 1000))}` : '—')}</span></td>
+        <td><div class="source">${escapeHtml(marketLabel(trade))}</div><span class="live-round-time">${escapeHtml(start ? `${shortTimeFmt.format(new Date(start * 1000))}–${shortTimeFmt.format(new Date((start + getTimeframe(trade).seconds) * 1000))}` : '—')}</span></td>
         <td><span class="badge ${side === 'BUY' ? 'buy-badge' : 'sell-badge'}">${escapeHtml(side)}</span></td>
         <td class="${outcome === 'Up' ? 'up-text' : outcome === 'Down' ? 'down-text' : ''}"><strong>${escapeHtml(outcome)}</strong></td>
         <td>${fmtShares(trade.size)}</td>
@@ -1999,7 +2098,8 @@
       ctx.beginPath();
       values.forEach((value, index) => {
         const x = xFor(index), y = yFor(value);
-        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        if (index === 0) ctx.moveTo(x, y);
+        else { ctx.lineTo(x, yFor(values[index - 1])); ctx.lineTo(x, y); }
       });
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = points.length > 160 ? 1.5 : 2.2;
@@ -2038,8 +2138,9 @@
     state.chartHitPoints = [];
 
     if (!allRows.length) {
-      els.chartCaption.textContent = `No resolved BTC ${state.timeframe} markets with final 1/0 prices in the selected period.`;
-      drawChartMessage(els.balanceChart, els.balanceChartEmpty, 'No cumulative equity yet for the selected period', 'balanceHitPoints');
+      state.balanceRows = []; state.balanceRect = null; els.balanceChartTooltip.hidden = true;
+      els.chartCaption.textContent = `No resolved ${selectionLabel()} markets with final 1/0 prices in the selected period.`;
+      drawChartMessage(els.balanceChart, els.balanceChartEmpty, state.selectedMarkets.size ? 'No cumulative equity yet for the selected period' : 'No markets selected — enable a market above', 'balanceHitPoints');
       return;
     }
 
@@ -2063,7 +2164,7 @@
     const maxDrawdown = calculateMaxDrawdownFromPoints(cumulative);
     const startLabel = axisDateTimeFmt.format(new Date(getEquityChartStartSec() * 1000));
     const endLabel = axisDateTimeFmt.format(new Date((cumulative.at(-1)?.timestamp || Math.floor(Date.now() / 1000)) * 1000));
-    els.chartCaption.textContent = `Settled BTC ${state.timeframe} trading P&L from $0, not wallet balance. Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
+    els.chartCaption.textContent = `Settled ${selectionLabel()} trading P&L from $0, not wallet balance. Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
   }
 
   function renderChart() {
@@ -2103,12 +2204,12 @@
         positionTooltip(els.balanceChartTooltip, rect, nearest, `<strong>Старт расчёта</strong><span>Накопительный P&amp;L: <b>$0.00</b></span><span>${escapeHtml(dateFmt.format(new Date(point.timestamp * 1000)))}</span>`);
         return;
       }
-      const row = point.row;
+      const closing = point.rows || [point.row];
       positionTooltip(els.balanceChartTooltip, rect, nearest, `
-        <strong>${escapeHtml(formatRange(row.startSec))}</strong>
-        <span>Баланс P&amp;L: <b class="${point.value >= 0 ? 'positive' : 'negative'}">${fmtMoney(point.value, true)}</b></span>
-        <span>Этот раунд: <b class="${row.pnl >= 0 ? 'positive' : 'negative'}">${row.approximate ? '≈ ' : ''}${fmtMoney(row.pnl, true)}</b></span>
-        <span>Результат: ${escapeHtml(row.winner || '—')} · fee ${fmtMoney(row.feeTotal)}</span>`);
+        <strong>${escapeHtml(dateFmt.format(new Date(point.timestamp * 1000)))}</strong>
+        <span>Equity P&amp;L: <b class="${point.value >= 0 ? 'positive' : 'negative'}">${fmtMoney(point.value, true)}</b></span>
+        <span>${closing.length} closing round${closing.length === 1 ? '' : 's'}: ${fmtMoney(point.roundPnl, true)}</span>
+        ${closing.map(row => `<span>${escapeHtml(marketLabel(row))}: ${row.approximate ? '≈ ' : ''}${fmtMoney(row.pnl,true)}</span>`).join('')}`);
       return;
     }
     const found = nearestPoint(event, els.chart, state.chartHitPoints);
@@ -2117,7 +2218,7 @@
     const row = nearest.point;
     const audit = row.auditStatus === 'verified' ? 'API совпал' : row.auditStatus === 'stale-zero' ? 'нулевой API отклонён' : row.auditStatus === 'mismatch' ? 'есть расхождение API' : 'API ещё не заполнен';
     positionTooltip(els.chartTooltip, rect, nearest, `
-      <strong>${escapeHtml(formatRange(row.startSec))}</strong>
+      <strong>${escapeHtml(formatRange(row.startSec, getTimeframe(row).seconds))}</strong>
       <span>P&amp;L: <b class="${row.pnl >= 0 ? 'positive' : 'negative'}">${row.approximate ? '≈ ' : ''}${fmtMoney(row.pnl, true)}</b></span>
       <span>Закрытие: ${escapeHtml(row.winner || '—')}=1 · payout ${fmtMoney(row.payout)}</span>
       <span>Fee: ${fmtMoney(row.feeTotal)} · ${escapeHtml(audit)}</span>`);
@@ -2153,7 +2254,7 @@
     const slug = row.eventSlug || row.slug;
     const pnlClass = row.pnl > 0 ? 'positive' : row.pnl < 0 ? 'negative' : 'neutral';
     els.modalTitle.textContent = row.title;
-    els.modalSub.textContent = `${formatRange(row.startSec)} · ${row.conditionId || 'conditionId отсутствует'}`;
+    els.modalSub.textContent = `${formatRange(row.startSec, getTimeframe(row).seconds)} · ${row.conditionId || 'conditionId отсутствует'}`;
 
     const breakdownByKey = new Map((row.settlement?.fillBreakdown || []).map(item => [item.key, item]));
     const fills = row.trades.slice().sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
@@ -2238,7 +2339,7 @@
       'api_pnl_usdc','api_minus_calculation_usdc','audit_status','claim_status','redeemable_winning_shares',
       'up_buy_ops','up_buy_fills','up_buy_usdc','up_buy_shares','up_sell_ops','up_sell_usdc','net_up_shares',
       'down_buy_ops','down_buy_fills','down_buy_usdc','down_buy_shares','down_sell_ops','down_sell_usdc','net_down_shares',
-      'taker_fills','maker_fills','assumed_taker_fills','condition_id','excluded','quality_issues'
+      'taker_fills','maker_fills','assumed_taker_fills','condition_id','excluded','quality_issues','symbol','timeframe','end_iso'
     ];
     const lines = [headers];
     for (const row of rows) {
@@ -2249,7 +2350,8 @@
         row.claimInfo?.status || '', row.claimInfo?.redeemableShares || 0,
         row.up.buyOps, row.up.buyFills, row.up.buyNotional, row.up.buyShares, row.up.sellOps, row.up.sellNotional, row.netSharesUp,
         row.down.buyOps, row.down.buyFills, row.down.buyNotional, row.down.buyShares, row.down.sellOps, row.down.sellNotional, row.netSharesDown,
-        row.settlement?.takerCount || 0, row.settlement?.makerCount || 0, row.settlement?.assumedTakerCount || 0, row.conditionId, row.excluded, row.qualityIssues.join('; ')
+        row.settlement?.takerCount || 0, row.settlement?.makerCount || 0, row.settlement?.assumedTakerCount || 0, row.conditionId, row.excluded, row.qualityIssues.join('; '),
+        row.symbol?.toUpperCase() || '', row.timeframe || '', row.endSec ? new Date(row.endSec * 1000).toISOString() : ''
       ]);
     }
     return '\uFEFF' + lines.map(cols => cols.map(value => `"${(typeof value === 'string' && /^[\s]*[=+@\-]/.test(value) ? "'"+value : String(value)).replaceAll('"','""')}"`).join(',')).join('\r\n');
@@ -2262,7 +2364,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `polymarket-btc${state.timeframe}-${state.proxyWallet || 'demo'}-${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `polymarket-${[...state.selectedMarkets].join('_')}-${state.proxyWallet || 'demo'}-${new Date().toISOString().slice(0,10)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -2285,7 +2387,7 @@
   }
 
   function initializeTradeState(trades) {
-    state.allTrades = prepareTradeBatch(trades).filter(isBtcMarket);
+    state.allTrades = keepSupportedTrades(prepareTradeBatch(trades));
     classifyTakerTrades();
     state.tradeKeys = new Set(state.allTrades.map(tradeKey));
     state.newTradeKeys.clear();
@@ -2311,10 +2413,10 @@
     state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
     setLoading(true, silent);
     state.demo = false;
-    state.truncatedTrades=false;
+    state.truncatedTrades=false; state.scopeIssueConditions=new Set();
     state.ledgerEvents=[]; state.ledgerComplete=false; state.ledgerCoverageEnd=0; state.qualityWarnings=[];
     state.rows=[]; state.allTrades=[]; state.currentPositions=[]; state.closedPositions=[]; state.markets=new Map();
-    state.proxyWallet=''; state.lastTradeTimestamp=0; state.lastLiveAt=0;
+    state.proxyWallet=''; state.lastTradeTimestamp=0; state.lastLiveAt=0; state.activityCoverageEnd=0;
     document.getElementById('rebateResult').textContent='Fetch a UTC day for the current visible markets.';
     els.resolvedAddress.textContent='—'; els.lastUpdated.textContent='Loading';
     render();
@@ -2324,7 +2426,7 @@
     state.takerHistoryComplete = false;
     state.auditCompleted = 0;
     state.auditFailed = 0;
-    const sinceSec = Math.floor(requestedSince / getTimeframe().seconds) * getTimeframe().seconds;
+    const sinceSec = Math.floor(requestedSince / MAX_MARKET_SECONDS) * MAX_MARKET_SECONDS;
     if (!Number.isFinite(sinceSec) || sinceSec <= 0 || sinceSec >= nowSec) {
       if (!silent) toast('Start date must be before the current time.', 'error');
       setLoading(false, silent);
@@ -2354,6 +2456,7 @@
       if (generation !== state.generation) return;
       if (dataResults[0].status !== 'fulfilled') throw dataResults[0].reason;
       const trades = dataResults[0].value;
+      state.activityCoverageEnd = nowSec;
       state.ledgerEvents=dataResults[4].status==='fulfilled' ? dataResults[4].value.rows : [];
       state.ledgerCoverageEnd=nowSec;
       state.ledgerComplete=dataResults[4].status==='fulfilled' && dataResults[4].value.complete;
@@ -2371,7 +2474,7 @@
 
       initializeTradeState(trades);
       const groups = buildGroups(state.allTrades, sinceSec);
-      if (!silent) setStatus(`Найдено ${groups.length} BTC ${state.timeframe} раундов. Проверяю final 1/0 и fee‑параметры…`, 'loading');
+      if (!silent) setStatus(`Найдено ${groups.length} BTC / ETH / SOL раундов (все интервалы). Проверяю final 1/0 и fee‑параметры…`, 'loading');
       const marketResults = await Promise.allSettled([fetchMarkets(groups), fetchClobMarketInfos(groups)]);
       if (generation !== state.generation) return;
       state.markets = marketResults[0].status === 'fulfilled' ? marketResults[0].value : new Map();
@@ -2413,8 +2516,7 @@
 
   function mergeLiveTrades(incoming) {
     const newRows = [];
-    for (const trade of incoming) {
-      if (!isBtcMarket(trade)) continue;
+    for (const trade of keepSupportedTrades(incoming)) {
       const key = tradeKey(trade);
       if (!state.tradeKeys.has(key)) {
         state.tradeKeys.add(key);
@@ -2424,7 +2526,7 @@
     }
     if (!newRows.length) return [];
     state.allTrades = prepareTradeBatch([...newRows, ...state.allTrades])
-      .filter(trade => normalizeTimestamp(trade.timestamp) >= state.historySinceSec - getTimeframe().seconds && isBtcMarket(trade))
+      .filter(trade => normalizeTimestamp(trade.timestamp) >= state.historySinceSec && isSupportedMarket(trade))
       .sort((a, b) => normalizeTimestamp(b.timestamp) - normalizeTimestamp(a.timestamp));
     classifyTakerTrades();
     state.tradeKeys = new Set(state.allTrades.map(tradeKey));
@@ -2438,11 +2540,13 @@
     const generation=state.generation;
     try {
       const endSec = Math.floor(Date.now() / 1000);
-      const startSec = Math.max(state.historySinceSec, (state.lastTradeTimestamp || endSec - getTimeframe().seconds) - 120);
+      const startSec = Math.max(state.historySinceSec, (state.activityCoverageEnd || state.historySinceSec) - 120);
+      const wasTruncated = state.truncatedTrades, knownScopeIssues = state.scopeIssueConditions.size;
       const recent = await fetchRecentActivity(state.proxyWallet, startSec, endSec);
       if (generation!==state.generation) return;
       const newRows = mergeLiveTrades(recent);
       state.lastLiveAt = Date.now();
+      if (!state.truncatedTrades) state.activityCoverageEnd = endSec;
 
       if (newRows.length) {
         const newMarketHints = newRows.filter(row => {
@@ -2459,6 +2563,8 @@
         render();
         const total = newRows.reduce((sum, row) => sum + tradeNotional(row), 0);
         toast(`Новые fills: ${newRows.length} · ${fmtMoney(total)}`);
+      } else if (state.truncatedTrades !== wasTruncated || state.scopeIssueConditions.size !== knownScopeIssues) {
+        refreshRowsFromCache(); render();
       } else {
         renderLiveFeed();
         renderCurrentRound();
@@ -2540,8 +2646,12 @@
     }
   }
 
-  function demoData() {
-    const currentStart = Math.floor(Date.now() / (getTimeframe().seconds * 1000)) * getTimeframe().seconds;
+  function demoData(marketKey = 'btc-5m') {
+    const [symbol,timeframe] = MARKET_KEYS.includes(marketKey) ? marketKey.split('-') : ['btc','5m'];
+    const seconds = TIMEFRAMES[timeframe].seconds;
+    const streamId = MARKET_KEYS.indexOf(`${symbol}-${timeframe}`) + 1;
+    const conditionFor = start => `0x${(BigInt(start) * 16n + BigInt(streamId)).toString(16).padStart(64,'0')}`;
+    const currentStart = Math.floor(Date.now() / (seconds * 1000)) * seconds;
     const trades = [];
     const markets = new Map();
     const clobMarkets = new Map();
@@ -2549,19 +2659,19 @@
     const random = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
     const makeTrade = (roundStart, outcome, side, size, price, index) => ({
       proxyWallet: '0xDemo000000000000000000000000000000000000',
-      asset: `${roundStart}-${outcome}`,
-      conditionId: `0x${String(roundStart).padStart(64, '0')}`,
+      asset: `${symbol}-${timeframe}-${roundStart}-${outcome}`,
+      conditionId: conditionFor(roundStart),
       size: roundTo(size, 5), price: roundTo(price, 4), usdcSize: roundTo(size * price, 8),
       timestamp: roundStart + 18 + (index % 10) * 13,
-      title: `Bitcoin Up or Down — ${state.timeframe} demo ${shortTimeFmt.format(new Date(roundStart * 1000))}`,
-      slug: `btc-updown-${state.timeframe}-${roundStart}`, eventSlug: `btc-updown-${state.timeframe}-${roundStart}`,
+      title: `${COINS[symbol]} Up or Down — ${timeframe} demo ${shortTimeFmt.format(new Date(roundStart * 1000))}`,
+      slug: `${symbol}-updown-${timeframe}-${roundStart}`, eventSlug: `${symbol}-updown-${timeframe}-${roundStart}`,
       outcome, side, transactionHash: `0x${String(roundStart + index).padStart(64, 'a')}`
     });
 
     for (let i = 1; i <= 42; i++) {
-      const start = currentStart - i * getTimeframe().seconds;
+      const start = currentStart - i * seconds;
       const winner = random() > .48 ? 'Up' : 'Down';
-      const condition = `0x${String(start).padStart(64, '0')}`.toLowerCase();
+      const condition = conditionFor(start);
       const upSize = 8 + Math.floor(random() * 26);
       const downSize = 8 + Math.floor(random() * 26);
       trades.push(makeTrade(start, 'Up', 'BUY', upSize, .22 + random() * .56, i * 10 + 1));
@@ -2579,19 +2689,25 @@
     }
     trades.push(makeTrade(currentStart, 'Down', 'BUY', 18, .42, 1));
     trades.push(makeTrade(currentStart, 'Up', 'BUY', 12, .51, 2));
-    const currentCondition = `0x${String(currentStart).padStart(64, '0')}`.toLowerCase();
+    const currentCondition = conditionFor(currentStart);
     markets.set(currentCondition, { conditionId: currentCondition, closed: false, active: true, feesEnabled: true, outcomes: '["Up","Down"]', outcomePrices: '["0.49","0.51"]' });
     clobMarkets.set(currentCondition, { fd: { r: 0.07, e: 1, to: true } });
     return { trades, markets, clobMarkets };
   }
 
   function showDemo() {
-    const demo = demoData();
+    const demo = {trades:[], markets:new Map(), clobMarkets:new Map()};
+    for (const key of MARKET_KEYS) {
+      const stream = demoData(key);
+      demo.trades.push(...stream.trades);
+      for (const [id,market] of stream.markets) demo.markets.set(id,market);
+      for (const [id,market] of stream.clobMarkets) demo.clobMarkets.set(id,market);
+    }
     state.generation++;
     els.dialog.close();
     invalidateRebates();
     state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
-    state.truncatedTrades=false;
+    state.truncatedTrades=false; state.scopeIssueConditions=new Set();
     state.ledgerEvents=[];
     state.ledgerComplete=true;
     state.ledgerCoverageEnd=Infinity;
@@ -2601,7 +2717,7 @@
     state.demo = true;
     state.proxyWallet = 'demo';
     state.inputAddress = '';
-    state.historySinceSec = Math.floor(getHistorySinceSec() / getTimeframe().seconds) * getTimeframe().seconds;
+    state.historySinceSec = Math.floor(getHistorySinceSec() / MAX_MARKET_SECONDS) * MAX_MARKET_SECONDS;
     state.currentPositions = [];
     state.closedPositions = [];
     state.markets = demo.markets;
@@ -2616,8 +2732,8 @@
     // and one row has a visible discrepancy. The close calculation always remains primary.
     for (const row of state.rows.filter(item => item.resolved && item.pnl != null)) {
       let apiPnl = row.pnl;
-      if (Math.floor(row.startSec / getTimeframe().seconds) % 11 === 0 && Math.abs(row.pnl) > 0.05) apiPnl = 0;
-      else if (Math.floor(row.startSec / getTimeframe().seconds) % 17 === 0) apiPnl = roundTo(row.pnl + 0.19, 8);
+      if (Math.floor(row.startSec / getTimeframe(row).seconds) % 11 === 0 && Math.abs(row.pnl) > 0.05) apiPnl = 0;
+      else if (Math.floor(row.startSec / getTimeframe(row).seconds) % 17 === 0) apiPnl = roundTo(row.pnl + 0.19, 8);
       const assets = [...new Map(row.trades.map(t => [String(t.asset), normalizeOutcome(t.outcome)])).entries()];
       const rows = assets.map(([asset, outcome], index) => ({
         conditionId: row.conditionId, asset, outcome,
@@ -2631,7 +2747,7 @@
         ok: true, finalized: true, winner: row.winner, pnl: apiPnl, rows,
         allPnlFieldsZero: Math.abs(apiPnl) < 1e-9, fetchedAt: Date.now(), source: 'demo audit'
       });
-      if (Math.floor(row.startSec / getTimeframe().seconds) % 6 === 0 && row.winningShares > 0) {
+      if (Math.floor(row.startSec / getTimeframe(row).seconds) % 6 === 0 && row.winningShares > 0) {
         const asset = row.trades.find(t => normalizeOutcome(t.outcome) === row.winner)?.asset || '';
         state.currentPositions.push({ conditionId: row.conditionId, asset, outcome: row.winner, size: row.winningShares, curPrice: 1, redeemable: true, currentValue: row.winningShares });
       }
@@ -2704,7 +2820,7 @@
       const absolute=compared.reduce((sum,row)=>sum+Math.abs(row.reconciliationDelta),0);
       notes.push(`API ✓ means within per-round tolerance: max($0.03, 0.05% of buy + sell notional). ${compared.length}/${d.count} compared; net API − calc ${fmtMoney(net,true)}; sum of absolute gaps ${fmtMoney(absolute)}. This is reconciliation, not receipt verification.`);
     }
-    notes.push(`This is settled BTC ${state.timeframe} trading P&L from zero, not wallet balance or return on capital. Deposits, withdrawals, open-position marks and external token transfers are not reconstructed. Fee schedules and public maker/taker matching are model inputs, not transaction receipt proof.`);
+    notes.push(`This is settled ${selectionLabel()} trading P&L from zero, not wallet balance or return on capital. Deposits, withdrawals, open-position marks and external token transfers are not reconstructed. Fee schedules and public maker/taker matching are model inputs, not transaction receipt proof.`);
     document.getElementById('coverageNote').textContent=notes.join(' ');
     const credits=state.ledgerEvents.filter(e=>['MAKER_REBATE','TAKER_REBATE'].includes(e.type));
     const sum=credits.reduce((n,e)=>n+Math.max(0,nullableNumber(e.usdcSize) || 0),0);
@@ -2734,7 +2850,7 @@
       const ids=new Set(getVisibleRows().map(r=>r.conditionId));
       const matched=eligible.filter(r=>ids.has(String(r.condition_id || '').toLowerCase()));
       const total=matched.reduce((n,r)=>n+Number(r.rebated_fees_usdc),0);
-      output.textContent=`${fmtMoney(total)} reported for visible BTC ${state.timeframe} markets on ${day} UTC · ${matched.length} records. Daily accrual, not proof of payment; excluded from the equity curve and wallet payout total.`;
+      output.textContent=`${fmtMoney(total)} reported for visible ${selectionLabel()} markets on ${day} UTC · ${matched.length} records. Daily accrual, not proof of payment; excluded from the equity curve and wallet payout total.`;
       state.dailyRebateRows=matched;
     } catch(error) { if (generation===state.generation && request===state.rebateRequest) output.textContent=`Rebates unavailable: ${error.message}`; }
     finally { if (generation===state.generation && request===state.rebateRequest) {state.rebateLoading=false;button.disabled=false;} }
@@ -2749,7 +2865,15 @@
   }
 
   els.load.addEventListener('click', () => loadReport());
-  els.timeframe.addEventListener('change', handleTimeframeChange);
+  els.marketSelection.addEventListener('change', event => {
+    const key = event.target.dataset.marketKey;
+    if (!MARKET_KEYS.includes(key)) return;
+    const selected = new Set(state.selectedMarkets);
+    if (event.target.checked) selected.add(key); else selected.delete(key);
+    setMarketSelection([...selected]);
+  });
+  document.getElementById('marketsAll').addEventListener('click', () => setMarketSelection(MARKET_KEYS));
+  document.getElementById('marketsNone').addEventListener('click', () => setMarketSelection([]));
   document.getElementById('rebateDate').value=new Date().toISOString().slice(0,10);
   document.getElementById('rebateDate').addEventListener('change',()=>{invalidateRebates();renderDiagnostics();});
   document.getElementById('rebateLoad').addEventListener('click',loadDailyRebates);
@@ -2832,8 +2956,8 @@
     state.chartResizeTimer = window.setTimeout(renderChart, 120);
   });
 
-  state.timeframe = normalizeTimeframe(new URLSearchParams(location.search).get('timeframe') || storageGet('pm-btc-timeframe'));
-  syncTimeframeLabels();
+  state.selectedMarkets = new Set(restoreMarketSelection(new URLSearchParams(location.search)));
+  syncMarketLabels();
   const savedAddress = storageGet('pm-btc5m-address');
   const savedLookback = storageGet('pm-btc5m-lookback');
   const savedStart = storageGet('pm-btc5m-start');

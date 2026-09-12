@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta name="description" content="BTC 5m and 15m trader settlement analysis, equity curve, fill audit and rebates." />
+  <meta name="description" content="Combined BTC, ETH and SOL 5m, 15m and 1h settlement analysis, equity curve, fill audit and rebates." />
   <link rel="icon" href="data:," />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Polymarket BTC 5m Equity Radar v5</title>
+  <title>Polymarket Multi-market Equity Radar</title>
   <link rel="stylesheet" href="/assets/radar.css" />
 </head>
 <body>
@@ -52,8 +52,18 @@
       <button class="btn secondary" id="demoBtn" type="button">Demo</button>
     </section>
 
+    <fieldset class="panel market-selection" id="marketSelection" aria-describedby="marketSelectionNote">
+      <legend>Markets included in equity</legend>
+      <div class="market-selection-toolbar"><span>Combine any asset and interval</span><div><button class="btn small secondary" id="marketsAll" type="button">All markets</button> <button class="btn small secondary" id="marketsNone" type="button">Clear</button></div></div>
+      <div class="market-selection-grid">
+        <div class="market-selection-row"><strong>BTC<small>Bitcoin</small></strong><label><input type="checkbox" data-market-key="btc-5m" aria-label="BTC 5m" checked /> 5m</label><label><input type="checkbox" data-market-key="btc-15m" aria-label="BTC 15m" /> 15m</label><label><input type="checkbox" data-market-key="btc-1h" aria-label="BTC 1h" /> 1h</label></div>
+        <div class="market-selection-row"><strong>ETH<small>Ethereum</small></strong><label><input type="checkbox" data-market-key="eth-5m" aria-label="ETH 5m" /> 5m</label><label><input type="checkbox" data-market-key="eth-15m" aria-label="ETH 15m" /> 15m</label><label><input type="checkbox" data-market-key="eth-1h" aria-label="ETH 1h" /> 1h</label></div>
+        <div class="market-selection-row"><strong>SOL<small>Solana</small></strong><label><input type="checkbox" data-market-key="sol-5m" aria-label="SOL 5m" /> 5m</label><label><input type="checkbox" data-market-key="sol-15m" aria-label="SOL 15m" /> 15m</label><label><input type="checkbox" data-market-key="sol-1h" aria-label="SOL 1h" /> 1h</label></div>
+      </div>
+      <p id="marketSelectionNote" class="source" role="status" aria-live="polite">1 of 9 enabled. Load once, then toggle markets without reloading.</p>
+    </fieldset>
+
     <div class="switchline">
-      <div class="timeframe-control"><label for="timeframeSelect">BTC markets</label><select id="timeframeSelect" aria-label="BTC market timeframe"><option value="5m" selected>5m</option><option value="15m">15m</option></select></div>
       <label><input id="autoRefresh" type="checkbox" checked /> Auto-refresh after load</label>
       <label><input id="resolvedOnly" type="checkbox" /> Resolved only</label>
       <label><input id="bothOnly" type="checkbox" /> Bought both Up and Down</label>

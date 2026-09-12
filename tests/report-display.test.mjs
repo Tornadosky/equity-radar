@@ -46,7 +46,7 @@ test('filter rendering preserves active loading and audit progress', () => {
 
 test('audit diagnostics disclose tolerated differences without letting opposite gaps cancel', () => {
   const a=loadRadar(); a.showDemo();
-  const rows=a.state.rows.filter(r=>r.resolved && r.pnl!=null).slice(0,2);
+  const rows=a.getVisibleRows().filter(r=>r.resolved && r.pnl!=null).slice(0,2);
   a.state.rows=rows;
   rows[0].reconciliationDelta=.49;
   rows[1].reconciliationDelta=-.4;
