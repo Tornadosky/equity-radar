@@ -244,3 +244,132 @@ test('complete load fetches all nine streams once, including real calendar-style
  assert.ok(a.state.rows.every(r=>r.calculationExact));
  a.setMarketSelection(['eth-1h','sol-1h']);assert.equal(calls,loadedCalls);assert.equal(a.state.balanceRows.at(-1).value,12);
 });
+
+test('report becomes interactive after selected metadata while the P&L audit is still in flight',async()=>{
+ const trades=keys.map(key=>fill(key));
+ const markets=keys.map(key=>({conditionId:condition(key),slug:trades[keys.indexOf(key)].slug,resolved:true,outcomes:['Up','Down'],outcomePrices:[1,0],feesEnabled:false,startDate:new Date(start*1000).toISOString()}));
+ let releaseAudit,auditStarted=0;
+ const auditGate=new Promise(resolve=>{releaseAudit=resolve;});
+ const a=loadRadar({Date:FixedDate,fetch:async raw=>{
+  const u=new URL(raw);let payload=[];
+  if(u.pathname.includes('/clob-markets/'))throw new Error('CLOB is unnecessary when Gamma already has a usable fee flag');
+  if(u.pathname.endsWith('/public-profile'))payload={proxyWallet:wallet};
+  else if(u.pathname.endsWith('/activity') && u.searchParams.get('type')==='TRADE')payload=trades;
+  else if(u.pathname.endsWith('/markets'))payload=markets;
+  else if(u.pathname.endsWith('/market-positions')){
+   auditStarted++;
+   await auditGate;
+   payload=[];
+  }
+  return {ok:true,json:async()=>payload};
+ }});
+ a.els.address.value=wallet;a.els.start.value=new Date((start+123)*1000).toISOString();
+ const pending=a.loadReport();
+ for(let i=0;i<200 && (a.state.loading || !a.state.auditLoading);i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(a.state.loading,false);
+ assert.equal(a.state.auditLoading,true);
+ assert.equal(a.state.reportHydrating,true);
+ assert.equal(a.state.rows.length,9);
+ assert.ok(auditStarted>=1);
+ releaseAudit();
+ await pending;
+ assert.equal(a.state.loading,false);
+ assert.equal(a.state.auditLoading,false);
+ assert.equal(a.state.reportHydrating,false);
+});
+
+test('BTC results paint while ETH and SOL metadata is still loading',async()=>{
+ const trades=keys.map(key=>fill(key));
+ const markets=keys.map(key=>({conditionId:condition(key),slug:trades[keys.indexOf(key)].slug,resolved:true,outcomes:['Up','Down'],outcomePrices:[1,0],feesEnabled:false,startDate:new Date(start*1000).toISOString()}));
+ let releaseRest;
+ const restGate=new Promise(resolve=>{releaseRest=resolve;});
+ const a=loadRadar({Date:FixedDate,fetch:async raw=>{
+  const u=new URL(raw);let payload=[];
+  if(u.pathname.endsWith('/public-profile'))payload={proxyWallet:wallet};
+  else if(u.pathname.endsWith('/activity') && u.searchParams.get('type')==='TRADE')payload=trades;
+  else if(u.pathname.endsWith('/markets')){
+   const ids=String(u.searchParams.get('condition_ids')||'').split(',').filter(Boolean);
+   if(ids.some(id=>{
+    const trade=trades.find(row=>row.conditionId===id.toLowerCase());
+    return trade && !String(trade.slug).startsWith('btc-');
+   })) await restGate;
+   payload=markets;
+  }
+  return {ok:true,json:async()=>payload};
+ }});
+ a.setMarketSelection(['btc-5m','eth-5m','sol-5m']);
+ a.els.address.value=wallet;a.els.start.value=new Date((start+123)*1000).toISOString();
+ const pending=a.loadReport();
+ for(let i=0;i<200 && a.state.loading;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(a.state.loading,false);
+ assert.equal(a.state.readySymbols.has('btc'),true);
+ assert.equal(a.state.readySymbols.has('eth'),false);
+ const visible=a.getVisibleRows();
+ assert.ok(visible.length>=1);
+ assert.ok(visible.every(row=>row.marketKey.startsWith('btc')));
+ assert.match(a.els.status.innerHTML,/Showing BTC 5m P&amp;L/);
+ assert.match(a.els.status.innerHTML,/ETH · SOL not on the chart yet/);
+ assert.doesNotMatch(a.els.status.innerHTML,/Showing BTC 5m · ETH 5m · SOL 5m P&amp;L/);
+ assert.match(a.document.getElementById('marketSelectionNote').textContent,/Chart shows BTC 5m only/);
+ assert.match(a.document.getElementById('marketSelectionNote').textContent,/ETH · SOL are enabled but not on the equity plot yet/);
+ releaseRest();
+ await pending;
+ const after=a.getVisibleRows();
+ assert.ok(after.some(row=>row.marketKey==='eth-5m'));
+ assert.ok(after.some(row=>row.marketKey==='sol-5m'));
+});
+
+test('Recheck P&L stays disabled until background hydration finishes',async()=>{
+ const trades=keys.map(key=>fill(key));
+ const markets=keys.map(key=>({conditionId:condition(key),slug:trades[keys.indexOf(key)].slug,resolved:true,outcomes:['Up','Down'],outcomePrices:[1,0],feesEnabled:false,startDate:new Date(start*1000).toISOString()}));
+ let releaseAudit;
+ const auditGate=new Promise(resolve=>{releaseAudit=resolve;});
+ const a=loadRadar({Date:FixedDate,fetch:async raw=>{
+  const u=new URL(raw);let payload=[];
+  if(u.pathname.endsWith('/public-profile'))payload={proxyWallet:wallet};
+  else if(u.pathname.endsWith('/activity') && u.searchParams.get('type')==='TRADE')payload=trades;
+  else if(u.pathname.endsWith('/markets'))payload=markets;
+  else if(u.pathname.endsWith('/market-positions'))await auditGate;
+  return {ok:true,json:async()=>payload};
+ }});
+ a.els.address.value=wallet;a.els.start.value=new Date((start+123)*1000).toISOString();
+ const pending=a.loadReport();
+ for(let i=0;i<200 && (a.state.loading || !a.state.auditLoading);i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(a.state.loading,false);
+ assert.equal(a.state.reportHydrating,true);
+ assert.equal(a.els.audit.disabled,true);
+ assert.equal(a.state.auditLoading,true);
+ a.verifyMarketPnls(a.state.rows,{force:true});
+ assert.equal(a.state.auditCompleted,0,'a second Recheck must not replace the in-flight hydration audit');
+ releaseAudit();
+ await pending;
+ assert.equal(a.els.audit.disabled,false);
+});
+
+test('Demo after first paint clears hydration so the demo banner can render',async()=>{
+ const trades=keys.map(key=>fill(key));
+ const markets=keys.map(key=>({conditionId:condition(key),slug:trades[keys.indexOf(key)].slug,resolved:true,outcomes:['Up','Down'],outcomePrices:[1,0],feesEnabled:false,startDate:new Date(start*1000).toISOString()}));
+ let releaseAudit;
+ const auditGate=new Promise(resolve=>{releaseAudit=resolve;});
+ const a=loadRadar({Date:FixedDate,fetch:async raw=>{
+  const u=new URL(raw);let payload=[];
+  if(u.pathname.endsWith('/public-profile'))payload={proxyWallet:wallet};
+  else if(u.pathname.endsWith('/activity') && u.searchParams.get('type')==='TRADE')payload=trades;
+  else if(u.pathname.endsWith('/markets'))payload=markets;
+  else if(u.pathname.endsWith('/market-positions'))await auditGate;
+  return {ok:true,json:async()=>payload};
+ }});
+ a.els.address.value=wallet;a.els.start.value=new Date((start+123)*1000).toISOString();
+ const pending=a.loadReport();
+ for(let i=0;i<200 && (a.state.loading || !a.state.auditLoading);i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(a.state.loading,false);
+ assert.equal(a.state.reportHydrating,true);
+ a.showDemo();
+ assert.equal(a.state.reportHydrating,false);
+ assert.equal(a.state.demo,true);
+ assert.match(a.els.status.innerHTML,/Demo|Visible/);
+ releaseAudit();
+ await pending;
+ assert.equal(a.state.demo,true);
+ assert.equal(a.state.reportHydrating,false);
+});

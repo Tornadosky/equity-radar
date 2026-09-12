@@ -25,6 +25,28 @@ test('closed market with terminal quote alone is not resolved',()=>{assert.equal
 test('invalid fee metadata cannot become an exact zero fee',()=>{const a=loadRadar();assert.equal(a.feeConfigForMarket(cid,{feeSchedule:{rate:-1,exponent:1}}).exact,false);});
 test('malformed resolution price evidence is excluded',()=>{const a=loadRadar();assert.equal(enrich(a,[fill()],{resolved:true,winner:'Up',outcomes:['Up','Down'],outcomePrices:[-1,2]}).pnl,null);});
 test('diagnostics are consistent with the plotted rows',()=>{const a=loadRadar();const rows=[{resolved:true,pnl:10,endSec:1,grossSettlementPnl:11,feeTotal:1,trades:[]},{resolved:true,pnl:-4,endSec:2,grossSettlementPnl:-3,feeTotal:1,trades:[]},{excluded:true,pnl:null,trades:[]}];const d=a.traderDiagnostics(rows);assert.equal(d.profitFactor,2.5);assert.equal(d.drawdown,4);assert.equal(d.pnl,d.gross-d.fees);assert.equal(d.excluded,1);});
+test('audit queue starts with selected visible rounds before older or hidden streams',async()=>{
+ class FixedDate extends Date {static now(){return (start+7200)*1000;}}
+ const order=[],pending=[];
+ const a=loadRadar({Date:FixedDate,fetch:url=>{
+  order.push(new URL(url).searchParams.get('market'));
+  return new Promise(resolve=>pending.push(()=>resolve({ok:true,json:async()=>[]})));
+ }});
+ a.state.proxyWallet='0x'+'1'.repeat(40);
+ a.els.lookback.value='1';
+ a.setMarketSelection(['btc-5m']);
+ const groups=[
+  {conditionId:'0x'+'3'.repeat(64),startSec:start,marketKey:'eth-5m',timeframe:'5m'},
+  {conditionId:'0x'+'2'.repeat(64),startSec:start+6600,marketKey:'btc-5m',timeframe:'5m'},
+  {conditionId:'0x'+'1'.repeat(64),startSec:start,marketKey:'btc-5m',timeframe:'5m'}
+ ];
+ const task=a.verifyMarketPnls(groups);
+ assert.equal(pending.length,3);
+ assert.deepEqual(order,['0x'+'2'.repeat(64),'0x'+'1'.repeat(64),'0x'+'3'.repeat(64)]);
+ for(const done of pending)done();
+ await task;
+});
+
 test('obsolete audit cannot mutate new wallet state or continue requests',async()=>{
  const pending=[],calls=[];const a=loadRadar({fetch:url=>{calls.push(url);return new Promise(resolve=>pending.push(()=>resolve({ok:true,json:async()=>[]})));}});
  a.state.proxyWallet='0x'+'1'.repeat(40);

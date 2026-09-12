@@ -18,6 +18,7 @@
   const LIVE_POLL_MS = 2500;
   const SETTLEMENT_REFRESH_MS = 15000;
   const MARKET_PNL_CONCURRENCY = 6;
+  const GAMMA_CHUNK_PARALLEL = 4;
   const ACTIVITY_PAGE_SIZE = 500;
   const ACTIVITY_MAX_OFFSET = 5000;
   const TAKER_PAGE_SIZE = 1000;
@@ -116,6 +117,8 @@
     lastSettlementAt: 0,
     truncatedTrades: false,
     demo: false,
+    reportHydrating: false,
+    readySymbols: new Set(),
     marketPnlCache: new Map(),
     auditLoading: false,
     auditCompleted: 0,
@@ -319,6 +322,19 @@
     return state.selectedMarkets.has(marketKeyFor(record));
   }
 
+
+  function recordSymbol(record) {
+    return String(marketKeyFor(record) || '').split('-')[0];
+  }
+
+
+  // During a live load, hide ETH/SOL until their metadata wave finishes so BTC can paint alone.
+  function isDisplayReady(record) {
+    if (!state.reportHydrating) return true;
+    return state.readySymbols.has(recordSymbol(record));
+  }
+
+
   function getTimeframe(record) {
     return TIMEFRAMES[normalizeTimeframe(record?.timeframe || marketDescriptor(record)?.timeframe)];
   }
@@ -334,13 +350,44 @@
     return `${symbol.toUpperCase()} ${timeframe}`;
   }
 
-  function selectionLabel() {
-    if (!state.selectedMarkets.size) return 'No markets selected';
+  function selectionLabel(markets = state.selectedMarkets) {
+    const selected = markets instanceof Set ? markets : new Set(markets);
+    if (!selected.size) return 'No markets selected';
     return Object.keys(COINS).map(symbol => {
-      const intervals = Object.keys(TIMEFRAMES).filter(tf => state.selectedMarkets.has(`${symbol}-${tf}`));
+      const intervals = Object.keys(TIMEFRAMES).filter(tf => selected.has(`${symbol}-${tf}`));
       return intervals.length ? `${symbol.toUpperCase()} ${intervals.join(' + ')}` : '';
     }).filter(Boolean).join(' · ');
   }
+
+
+  function pendingLoadSymbols() {
+    if (!state.reportHydrating) return [];
+    return Object.keys(COINS).filter(symbol =>
+      Object.keys(TIMEFRAMES).some(tf => state.selectedMarkets.has(`${symbol}-${tf}`))
+      && !state.readySymbols.has(symbol)
+    );
+  }
+
+
+  function plottedMarkets() {
+    const pending = pendingLoadSymbols();
+    if (!pending.length) return state.selectedMarkets;
+    return new Set([...state.selectedMarkets].filter(key => state.readySymbols.has(key.split('-')[0])));
+  }
+
+
+  function plottedSelectionLabel() {
+    const pending = pendingLoadSymbols();
+    if (!pending.length) return selectionLabel();
+    const plotted = plottedMarkets();
+    return plotted.size ? selectionLabel(plotted) : 'No markets plotted yet';
+  }
+
+
+  function pendingAssetsLabel() {
+    return pendingLoadSymbols().map(symbol => symbol.toUpperCase()).join(' · ');
+  }
+
 
   function normalizeMarketSelection(keys) {
     if (!Array.isArray(keys)) return ['btc-5m'];
@@ -351,11 +398,26 @@
     const label = selectionLabel();
     document.title = `Polymarket ${label} Equity Radar`;
     document.getElementById('marketSubtitle').textContent = `${label} · close-settlement P&L · live refresh`;
-    els.balanceChart.setAttribute('aria-label', `Cumulative settled trading P&L: ${label}`);
+    els.balanceChart.setAttribute('aria-label', `Cumulative settled trading P&L: ${plottedSelectionLabel()}`);
     els.marketSelection.querySelectorAll('input[data-market-key]').forEach(input => { input.checked = state.selectedMarkets.has(input.dataset.marketKey); });
-    document.getElementById('marketSelectionNote').textContent = state.selectedMarkets.size
-      ? `${state.selectedMarkets.size} of ${MARKET_KEYS.length} enabled. Filters update equity, totals, diagnostics, market CSV and live fills without reloading.`
-      : 'No markets selected. Enable at least one market to display equity; loaded data is retained.';
+    syncPendingMarketUi();
+  }
+
+
+  function syncPendingMarketUi() {
+    const pending = pendingLoadSymbols();
+    const note = document.getElementById('marketSelectionNote');
+    if (pending.length && state.selectedMarkets.size) {
+      const verb = pending.length === 1 ? 'is' : 'are';
+      note.textContent = `Chart shows ${plottedSelectionLabel()} only. ${pendingAssetsLabel()} ${verb} enabled but not on the equity plot yet.`;
+    } else if (state.selectedMarkets.size) {
+      note.textContent = `${state.selectedMarkets.size} of ${MARKET_KEYS.length} enabled. Filters update equity, totals, diagnostics, market CSV and live fills without reloading.`;
+    } else {
+      note.textContent = 'No markets selected. Enable at least one market to display equity; loaded data is retained.';
+    }
+    els.marketSelection.querySelectorAll('[data-symbol]').forEach(row => {
+      row.classList.toggle('is-pending', pending.includes(row.dataset.symbol));
+    });
   }
 
   function setMarketSelection(keys) {
@@ -432,16 +494,19 @@
 
   function renderReportStatus() {
     if (state.loading || state.auditLoading || (!state.demo && !state.proxyWallet)) return;
+    if (state.reportHydrating && !state.readySymbols.size) return;
+    const pending = pendingAssetsLabel();
+    const plotLabel = plottedSelectionLabel();
     const rows = getVisibleRows().filter(row => row.resolved && row.pnl != null);
     if (!rows.length) {
-      setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${selectionLabel()} P&L: — · No included settled rounds.`);
+      setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${plotLabel} P&L: — · No included settled rounds.${pending ? ` ${pending} not on the chart yet.` : ''}`, pending ? 'loading' : '');
       return;
     }
     const total = roundTo(rows.reduce((sum, row) => sum + row.pnl, 0), 8);
     const verified = rows.filter(row => row.auditStatus === 'verified').length;
     const mismatches = rows.filter(row => row.auditStatus === 'mismatch').length;
     const fallback = rows.filter(row => !row.calculationExact).length;
-    setStatus(`${state.demo ? 'Demo · ' : ''}Visible ${selectionLabel()} P&L: ${fmtMoney(total, true)} · ${rows.length} rounds · API✓ ${verified}${mismatches ? ` · mismatches ${mismatches}` : ''}${fallback ? ` · fallback ${fallback}` : ''}.`, mismatches ? 'loading' : 'ok');
+    setStatus(`${state.demo ? 'Demo · ' : ''}Showing ${plotLabel} P&L: ${fmtMoney(total, true)} · ${rows.length} rounds · API✓ ${verified}${mismatches ? ` · mismatches ${mismatches}` : ''}${fallback ? ` · fallback ${fallback}` : ''}.${pending ? ` ${pending} not on the chart yet.` : ''}`, pending || mismatches ? 'loading' : 'ok');
   }
 
   function toast(message, kind = '') {
@@ -918,13 +983,9 @@
     const chunks = [];
     for (let i = 0; i < ids.length; i += 35) chunks.push(ids.slice(i, i + 35));
 
-    // В Gamma API closed по умолчанию равен false. Поэтому исторические и активные
-    // рынки запрашиваются отдельно, иначе завершённые BTC окна не попадают в ответ.
-    for (const chunk of chunks) {
-      const results = await Promise.allSettled([
-        fetchGammaMarketsBatch(chunk, false),
-        fetchGammaMarketsBatch(chunk, true)
-      ]);
+    // Gamma defaults closed=false, so each chunk needs both open and closed queries.
+    // Run a few chunks at once; 1946 sequential 35-id batches would stall first paint.
+    const ingestBatch = results => {
       for (const result of results) {
         if (result.status !== 'fulfilled') {
           if (result.reason?.message === 'Report changed') throw result.reason;
@@ -933,6 +994,15 @@
         }
         result.value.forEach(market => addMarketToMap(map, market));
       }
+    };
+    for (let i = 0; i < chunks.length; i += GAMMA_CHUNK_PARALLEL) {
+      const part = chunks.slice(i, i + GAMMA_CHUNK_PARALLEL);
+      await Promise.all(part.map(async chunk => {
+        ingestBatch(await Promise.allSettled([
+          fetchGammaMarketsBatch(chunk, false),
+          fetchGammaMarketsBatch(chunk, true)
+        ]));
+      }));
     }
 
     // Надёжный fallback: прямой endpoint по slug возвращает и закрытые рынки.
@@ -994,10 +1064,23 @@
     });
   }
 
+  function marketHasUsableFee(market) {
+    const fs = market?.feeSchedule;
+    const rate = nullableNumber(fs?.rate ?? fs?.r);
+    const exponent = nullableNumber(fs?.exponent ?? fs?.e);
+    if (rate != null && rate >= 0 && rate <= 1 && exponent != null && exponent >= 0 && exponent <= 5) return true;
+    const feeFlag = market?.feesEnabled ?? market?.fees_enabled;
+    return feeFlag !== undefined && !asBool(feeFlag);
+  }
+
+
   async function fetchClobMarketInfos(records) {
     const ids = [...new Set((records || []).map(record =>
       String(typeof record === 'string' ? record : record?.conditionId || '').toLowerCase()
-    ).filter(id => /^0x[a-f0-9]{64}$/.test(id)))];
+    ).filter(id => {
+      if (!/^0x[a-f0-9]{64}$/.test(id) || state.clobMarkets.has(id)) return false;
+      return !marketHasUsableFee(state.markets.get(id));
+    }))];
     const result = new Map();
     let cursor = 0;
     const worker = async () => {
@@ -1012,9 +1095,77 @@
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(10, ids.length || 1) }, worker));
+    if (!ids.length) return result;
+    await Promise.all(Array.from({ length: Math.min(10, ids.length) }, worker));
     return result;
   }
+
+
+  async function loadGammaMetadata(records) {
+    if (!records?.length) return;
+    const markets = await fetchMarkets(records);
+    state.markets = mergeMarketMaps(state.markets, markets);
+  }
+
+
+  async function loadClobMetadata(records) {
+    if (!records?.length) return;
+    try {
+      const clob = await fetchClobMarketInfos(records);
+      state.clobMarkets = mergeMarketMaps(state.clobMarkets, clob);
+    } catch (error) {
+      if (error?.message === 'Report changed') throw error;
+      console.warn('Fee config API unavailable; using crypto fallback:', error);
+    }
+  }
+
+
+  async function loadMarketMetadata(records) {
+    await loadGammaMetadata(records);
+    await loadClobMetadata(records);
+  }
+
+
+  function groupEndSec(group) {
+    return (group.startSec || 0) + getTimeframe(group).seconds;
+  }
+
+
+  // BTC first so the chart can show Bitcoin while ETH and SOL metadata is still in flight.
+  function metadataWaves(groups) {
+    const list = groups || [];
+    const visibleSince = getEquityChartStartSec();
+    const selectedBtc = list.filter(group => isSelectedMarket(group) && recordSymbol(group) === 'btc');
+    const visibleBtc = selectedBtc.filter(group => groupEndSec(group) >= visibleSince);
+    const first = visibleBtc.length ? visibleBtc : selectedBtc;
+    if (!first.length) {
+      const selected = list.filter(isSelectedMarket);
+      if (selected.length) return [{ groups: selected, reveal: 'rest' }, { groups: list.filter(group => !isSelectedMarket(group)), reveal: '' }].filter(wave => wave.groups.length);
+      return list.length ? [{ groups: list, reveal: 'rest' }] : [];
+    }
+    const firstSet = new Set(first);
+    const selectedRest = list.filter(group => isSelectedMarket(group) && !firstSet.has(group));
+    const unselected = list.filter(group => !isSelectedMarket(group));
+    return [
+      { groups: first, reveal: 'btc' },
+      ...(selectedRest.length ? [{ groups: selectedRest, reveal: 'rest' }] : []),
+      ...(unselected.length ? [{ groups: unselected, reveal: '' }] : [])
+    ];
+  }
+
+
+  function markSymbolsReady(records, mode) {
+    if (!mode) return;
+    if (mode === 'btc') {
+      state.readySymbols.add('btc');
+      return;
+    }
+    for (const record of records || []) {
+      const symbol = recordSymbol(record);
+      if (symbol) state.readySymbols.add(symbol);
+    }
+  }
+
 
   function positionKey(row) {
     const condition = String(row?.conditionId || '').toLowerCase();
@@ -1136,7 +1287,16 @@
       if (!force && fresh && cached.ok && cached.finalized) continue;
       unique.set(conditionId, group);
     }
-    const targets = [...unique.values()];
+    const visibleSince = getEquityChartStartSec();
+    const symbolWeight = { btc: 0, eth: 1, sol: 2 };
+    const auditRank = group => {
+      const selected = isSelectedMarket(group) ? 0 : 1;
+      const endSec = (group.startSec || 0) + getTimeframe(group).seconds;
+      const visible = endSec >= visibleSince ? 0 : 1;
+      const symbol = symbolWeight[recordSymbol(group)] ?? 3;
+      return selected * 8 + visible * 4 + symbol;
+    };
+    const targets = [...unique.values()].sort((a, b) => auditRank(a) - auditRank(b) || (b.startSec || 0) - (a.startSec || 0));
     if (!targets.length) return;
 
     state.auditLoading = true;
@@ -1183,7 +1343,7 @@
     } finally {
       if (generation!==state.generation) return;
       state.auditLoading = false;
-      els.audit.disabled = !state.proxyWallet || state.demo;
+      els.audit.disabled = state.loading || state.reportHydrating || !state.proxyWallet || state.demo;
       els.audit.textContent = 'Перепроверить P&L';
       refreshRowsFromCache();
       renderMetrics();
@@ -1780,7 +1940,7 @@
   }
 
   function getVisibleRows() {
-    let rows = getPeriodRows().filter(isSelectedMarket);
+    let rows = getPeriodRows().filter(row => isSelectedMarket(row) && isDisplayReady(row));
     if (els.resolvedOnly.checked) rows = rows.filter(row => row.resolved);
     if (els.bothOnly.checked) rows = rows.filter(row => row.bothSides);
     const sort = els.sort.value;
@@ -1901,7 +2061,7 @@
       els.currentRoundSummary.textContent = 'No markets selected.';
       return;
     }
-    const current = new Map(state.rows.filter(row => row.startSec <= nowSec && row.endSec > nowSec && isSelectedMarket(row)).map(row => [row.marketKey,row]));
+    const current = new Map(state.rows.filter(row => row.startSec <= nowSec && row.endSec > nowSec && isSelectedMarket(row) && isDisplayReady(row)).map(row => [row.marketKey,row]));
     els.currentRoundSummary.innerHTML = [...state.selectedMarkets].map(key => {
       const seconds = TIMEFRAMES[key.split('-')[1]].seconds;
       const start = Math.floor(nowSec / seconds) * seconds;
@@ -1929,7 +2089,7 @@
     const countValue = els.liveCount.value;
     const maxRows = countValue === 'all' ? Infinity : Number(countValue) || 50;
     const trades = state.allTrades
-      .filter(isSelectedMarket)
+      .filter(row => isSelectedMarket(row) && isDisplayReady(row))
       .slice()
       .sort((a, b) => normalizeTimestamp(b.timestamp) - normalizeTimestamp(a.timestamp))
       .slice(0, maxRows);
@@ -2139,7 +2299,7 @@
 
     if (!allRows.length) {
       state.balanceRows = []; state.balanceRect = null; els.balanceChartTooltip.hidden = true;
-      els.chartCaption.textContent = `No resolved ${selectionLabel()} markets with final 1/0 prices in the selected period.`;
+      els.chartCaption.textContent = `No resolved ${plottedSelectionLabel()} markets with final 1/0 prices in the selected period.${pendingAssetsLabel() ? ` ${pendingAssetsLabel()} not on the chart yet.` : ''}`;
       drawChartMessage(els.balanceChart, els.balanceChartEmpty, state.selectedMarkets.size ? 'No cumulative equity yet for the selected period' : 'No markets selected — enable a market above', 'balanceHitPoints');
       return;
     }
@@ -2164,7 +2324,8 @@
     const maxDrawdown = calculateMaxDrawdownFromPoints(cumulative);
     const startLabel = axisDateTimeFmt.format(new Date(getEquityChartStartSec() * 1000));
     const endLabel = axisDateTimeFmt.format(new Date((cumulative.at(-1)?.timestamp || Math.floor(Date.now() / 1000)) * 1000));
-    els.chartCaption.textContent = `Settled ${selectionLabel()} trading P&L from $0, not wallet balance. Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
+    const pendingNote = pendingAssetsLabel() ? ` ${pendingAssetsLabel()} not on the chart yet.` : '';
+    els.chartCaption.textContent = `Settled ${plottedSelectionLabel()} trading P&L from $0, not wallet balance.${pendingNote} Equity curve uses all ${allRows.length} resolved rounds in ${periodLabel()} (${startLabel} → ${endLabel}) · Σ P&L ${provisional ? '≈ ' : ''}${fmtMoney(total, true)} · endpoint ${fmtMoney(endpoint, true)} · control ${Math.abs(auditDelta) < 0.000001 ? '✓ matched' : fmtMoney(auditDelta, true)} · API✓ ${apiVerified}${stale ? ` · stale 0 rejected ${stale}` : ''}${mismatch ? ` · mismatches ${mismatch}` : ''} · max drawdown ${fmtMoney(maxDrawdown)} · best ${fmtMoney(best.pnl, true)} · worst ${fmtMoney(worst.pnl, true)}.`;
   }
 
   function renderChart() {
@@ -2245,6 +2406,7 @@
     renderLiveFeed();
     renderChart();
     setLiveUi();
+    syncPendingMarketUi();
     renderReportStatus();
   }
 
@@ -2382,7 +2544,7 @@
     els.load.disabled = loading;
     els.wallet.disabled = loading;
     els.demo.disabled = loading;
-    els.audit.disabled = loading || state.demo || !state.proxyWallet;
+    els.audit.disabled = loading || state.reportHydrating || state.auditLoading || state.demo || !state.proxyWallet;
     if (!silent) els.load.innerHTML = loading ? '<span class="spinner"></span>Загрузка…' : 'Load report';
   }
 
@@ -2411,6 +2573,8 @@
     els.dialog.close();
     invalidateRebates();
     state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
+    state.reportHydrating=true;
+    state.readySymbols=new Set();
     setLoading(true, silent);
     state.demo = false;
     state.truncatedTrades=false; state.scopeIssueConditions=new Set();
@@ -2429,6 +2593,7 @@
     const sinceSec = Math.floor(requestedSince / MAX_MARKET_SECONDS) * MAX_MARKET_SECONDS;
     if (!Number.isFinite(sinceSec) || sinceSec <= 0 || sinceSec >= nowSec) {
       if (!silent) toast('Start date must be before the current time.', 'error');
+      state.reportHydrating = false;
       setLoading(false, silent);
       return;
     }
@@ -2474,30 +2639,42 @@
 
       initializeTradeState(trades);
       const groups = buildGroups(state.allTrades, sinceSec);
-      if (!silent) setStatus(`Найдено ${groups.length} BTC / ETH / SOL раундов (все интервалы). Проверяю final 1/0 и fee‑параметры…`, 'loading');
-      const marketResults = await Promise.allSettled([fetchMarkets(groups), fetchClobMarketInfos(groups)]);
-      if (generation !== state.generation) return;
-      state.markets = marketResults[0].status === 'fulfilled' ? marketResults[0].value : new Map();
-      state.clobMarkets = marketResults[1].status === 'fulfilled' ? marketResults[1].value : new Map();
-      if (marketResults[0].status === 'rejected') throw marketResults[0].reason;
-      if (marketResults[1].status === 'rejected') console.warn('Fee config API unavailable; using crypto fallback:', marketResults[1].reason);
+      const waves = metadataWaves(groups);
+      let unlocked = false;
+      for (const wave of waves) {
+        if (!silent && !unlocked) {
+          const label = wave.reveal === 'btc' ? 'BTC' : wave.reveal === 'rest' ? 'ETH / SOL' : 'остальных интервалов';
+          setStatus(`Найдено ${groups.length} BTC / ETH / SOL раундов. Загружаю ${label}…`, 'loading');
+        }
+        try {
+          await loadMarketMetadata(wave.groups);
+        } catch (error) {
+          if (error?.message === 'Report changed') throw error;
+          if (wave.reveal) throw error;
+          console.warn('Background-stream metadata unavailable:', error);
+        }
+        if (generation !== state.generation) return;
+        markSymbolsReady(wave.groups, wave.reveal);
+        if (wave.reveal && !unlocked) {
+          // BTC (or the first selected asset) can be used while other coins still load.
+          setLoading(false, silent);
+          unlocked = true;
+          state.lastLoadAt = Date.now();
+          state.lastSettlementAt = Date.now();
+          storageSet('pm-btc5m-address', inputAddress);
+          storageSet('pm-btc5m-lookback', String(els.lookback.value));
+          storageSet('pm-btc5m-start', String(els.start?.value || ''));
+          els.lastUpdated.textContent = `История ${new Date().toLocaleTimeString('ru-RU')}`;
+          if (!silent && state.truncatedTrades) toast('На счёте очень много fills; часть самых старых записей могла не попасть в выбранный период.');
+        }
+        refreshRowsFromCache();
+        render();
+      }
 
-      refreshRowsFromCache();
-      render();
       await verifyMarketPnls(groups, { force: true, silent });
       if (generation!==state.generation) return;
       refreshRowsFromCache();
-      if (generation !== state.generation) return;
-      state.lastLoadAt = Date.now();
-      state.lastSettlementAt = Date.now();
-      storageSet('pm-btc5m-address', inputAddress);
-      storageSet('pm-btc5m-lookback', String(els.lookback.value));
-      storageSet('pm-btc5m-start', String(els.start?.value || ''));
-
-      els.lastUpdated.textContent = `История ${new Date().toLocaleTimeString('ru-RU')}`;
-      els.audit.disabled = false;
       render();
-      if (!silent && state.truncatedTrades) toast('На счёте очень много fills; часть самых старых записей могла не попасть в выбранный период.');
     } catch (error) {
       if (generation !== state.generation) return;
       state.proxyWallet=''; state.rows=[]; state.allTrades=[]; render();
@@ -2507,6 +2684,7 @@
       setLiveUi('error');
     } finally {
       if (generation!==state.generation) return;
+      state.reportHydrating = false;
       setLoading(false, silent);
       renderDiagnostics();
       renderReportStatus();
@@ -2535,7 +2713,7 @@
   }
 
   async function pollLiveTrades() {
-    if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.livePolling || document.visibilityState !== 'visible') return;
+    if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.reportHydrating || state.livePolling || document.visibilityState !== 'visible') return;
     state.livePolling = true;
     const generation=state.generation;
     try {
@@ -2581,7 +2759,7 @@
   }
 
   async function refreshSettlementData() {
-    if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.settlementLoading || document.visibilityState !== 'visible') return;
+    if (!els.autoRefresh.checked || state.demo || !state.proxyWallet || state.loading || state.reportHydrating || state.settlementLoading || document.visibilityState !== 'visible') return;
     state.settlementLoading = true;
     const generation=state.generation;
     try {
@@ -2707,6 +2885,8 @@
     els.dialog.close();
     invalidateRebates();
     state.livePolling=false; state.settlementLoading=false; state.auditLoading=false;
+    state.reportHydrating=false;
+    state.loading=false;
     state.truncatedTrades=false; state.scopeIssueConditions=new Set();
     state.ledgerEvents=[];
     state.ledgerComplete=true;

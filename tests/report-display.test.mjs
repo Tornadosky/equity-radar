@@ -35,7 +35,7 @@ test('banner follows the visible period and updated settlements, like the chart'
 
 test('filter rendering preserves active loading and audit progress', () => {
   const a=loadRadar(); a.showDemo();
-  for (const flag of ['loading','auditLoading']) {
+  for (const flag of ['loading','auditLoading','reportHydrating']) {
     a.state[flag]=true;
     a.els.status.innerHTML='Progress in flight';
     a.render();
